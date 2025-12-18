@@ -22,7 +22,7 @@
         .message {
             font-size: 3rem; display: none;
             color: #ff7b72; animation: pop 1s infinite alternate;
-            text-transform: uppercase; /* Text ko bada dikhane ke liye */
+            text-transform: uppercase;
         }
         @keyframes pop { from { transform: scale(1); } to { transform: scale(1.1); } }
         .sub-text { color: #8b949e; margin-top: 20px; font-size: 1.2rem; }
@@ -39,21 +39,33 @@
     <div class="sub-text" id="sign" style="display:none;">From your crazy Bestu ❤️</div>
 
     <script>
+        // --- MAGIC TESTING LOGIC ---
+        // URL se check karega ki kya tum test kar rahe ho?
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTest = urlParams.get('test');
+
         const now = new Date();
         const target = new Date();
-        target.setHours(24, 0, 0, 0); // 12:00 AM Midnight
+
+        if (isTest) {
+            // Agar link mein '?test=1' hai, toh bas 3 second ka timer lagao (Test karne ke liye)
+            target.setTime(now.getTime() + 3000); 
+        } else {
+            // Real Birthday: Raat ke 12 baje (Midnight)
+            target.setHours(24, 0, 0, 0); 
+        }
 
         function updateTimer() {
             const current = new Date();
             const diff = target - current;
 
             if (diff <= 0) {
-                // Birthday Mode ON
+                // Time Up! Show Magic
                 document.getElementById('countdown').style.display = 'none';
                 document.getElementById('title').style.display = 'none';
                 
                 document.getElementById('hbd').style.display = 'block';
-                document.getElementById('sign').style.display = 'block'; // Signature dikhao
+                document.getElementById('sign').style.display = 'block';
                 
                 document.body.style.backgroundColor = '#161b22';
                 launchConfetti();

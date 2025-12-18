@@ -5,7 +5,7 @@ import re
 import shutil
 import json
 import uuid
-from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session
+from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
 app.secret_key = "final_birthday_edition_2025"
@@ -19,7 +19,6 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- CACHE BUSTER (No Refresh Glitch) ---
 @app.after_request
 def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -27,7 +26,6 @@ def add_header(r):
     r.headers["Expires"] = "0"
     return r
 
-# --- SESSION ID ---
 def get_user_id():
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())[:8]
@@ -41,6 +39,71 @@ def get_service_status():
         with open(STATUS_FILE, 'r') as f: return json.load(f).get("active", True)
     except: return True
 
+# --- HTML CODE INSIDE PYTHON (NO FILE NEEDED) ---
+BIRTHDAY_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surprise! 🎂</title>
+    <style>
+        body { background-color: #0d1117; color: white; font-family: 'Arial', sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; overflow: hidden; }
+        h1 { font-size: 2rem; color: #58a6ff; margin-bottom: 20px; }
+        .timer { font-size: 4rem; font-weight: bold; color: #238636; text-shadow: 0 0 20px #238636; margin: 20px 0; }
+        .message { font-size: 3rem; display: none; color: #ff7b72; animation: pop 1s infinite alternate; text-transform: uppercase; }
+        @keyframes pop { from { transform: scale(1); } to { transform: scale(1.1); } }
+        .sub-text { color: #8b949e; margin-top: 20px; font-size: 1.2rem; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+    <h1 id="title">Wait for it... ❤️</h1>
+    <div class="timer" id="countdown">00:00:00</div>
+    <div class="message" id="hbd">🎉 HAPPY BIRTHDAY BESTIE! 🎂</div>
+    <div class="sub-text" id="sign" style="display:none;">From your crazy Bestu ❤️</div>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTest = urlParams.get('test');
+        const now = new Date();
+        const target = new Date();
+        if (isTest) { target.setTime(now.getTime() + 3000); } 
+        else { target.setHours(24, 0, 0, 0); }
+        
+        function updateTimer() {
+            const current = new Date();
+            const diff = target - current;
+            if (diff <= 0) {
+                document.getElementById('countdown').style.display = 'none';
+                document.getElementById('title').style.display = 'none';
+                document.getElementById('hbd').style.display = 'block';
+                document.getElementById('sign').style.display = 'block';
+                document.body.style.backgroundColor = '#161b22';
+                launchConfetti();
+                clearInterval(interval);
+                return;
+            }
+            const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+            const m = Math.floor((diff / 1000 / 60) % 60);
+            const s = Math.floor((diff / 1000) % 60);
+            document.getElementById('countdown').innerText = (h<10?"0"+h:h) + ":" + (m<10?"0"+m:m) + ":" + (s<10?"0"+s:s);
+        }
+        function launchConfetti() {
+            var duration = 15 * 1000;
+            var end = Date.now() + duration;
+            (function frame() {
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+                if (Date.now() < end) requestAnimationFrame(frame);
+            }());
+        }
+        const interval = setInterval(updateTimer, 1000);
+        updateTimer();
+    </script>
+</body>
+</html>
+"""
+
 # --- ROUTES ---
 @app.route('/')
 def index():
@@ -48,16 +111,13 @@ def index():
     user_font_dir = os.path.join(BASE_FONT, uid)
     os.makedirs(user_font_dir, exist_ok=True)
     fonts = [f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))]
-    
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
-    
     for f in all_files:
         if f.endswith('.log'): continue
         if f.startswith(uid) or (f.startswith("RUNNING_") and uid in f):
             clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
             user_files.append({'real_name': f, 'display_name': clean_name})
-            
     return render_template('index.html', files=user_files, fonts=fonts, is_active=get_service_status())
 
 @app.route('/upload_font', methods=['POST'])
@@ -72,77 +132,57 @@ def upload_font():
 @app.route('/progress/<filename>')
 def get_progress(filename):
     clean_name = filename.replace("RUNNING_", "")
-    # Check 1: File Ban Gayi?
     if os.path.exists(os.path.join(BASE_DOWNLOAD, clean_name)):
         return jsonify({"percent": 100, "status": "✅ Done"})
-
-    # Check 2: Log File
     log_file = os.path.join(BASE_DOWNLOAD, filename + ".log")
-    if not os.path.exists(log_file): 
-        return jsonify({"percent": 0, "status": "Starting..."})
-        
+    if not os.path.exists(log_file): return jsonify({"percent": 0, "status": "Starting..."})
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", content)
-        
         if duration_match and time_matches:
             def to_sec(t):
                 h, m, s = t.split(':')
                 return int(h)*3600 + int(m)*60 + float(s)
-            
             total = to_sec(duration_match.group(1))
             current = to_sec(time_matches[-1])
             percent = int((current / total) * 100) if total > 0 else 0
             if percent > 98: percent = 100
             return jsonify({"percent": percent, "status": f"Processing {percent}%"})
-            
         return jsonify({"percent": 5, "status": "Initializing..."})
-    except: 
-        return jsonify({"percent": 0})
+    except: return jsonify({"percent": 0})
 
 @app.route('/mux', methods=['POST'])
 def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
-    
-    # Cleanup Old Files
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
             except: pass
-
     m3u8_link = request.form.get('video_url')
     raw_filename = request.form.get('filename').replace(" ", "_")
     selected_font = request.form.get('font')
-    
     final_name = f"{uid}_{raw_filename}"
     if not final_name.endswith('.mkv'): final_name += ".mkv"
-    
     sub_file = request.files.get('subtitle')
     if not sub_file: return "Subtitle Required!"
     sub_path = os.path.join(BASE_UPLOAD, f"sub_{uid}_{int(time.time())}.ass")
     sub_file.save(sub_path)
-
     temp_name = f"RUNNING_{final_name}"
     temp_path = os.path.join(BASE_DOWNLOAD, temp_name)
     final_path = os.path.join(BASE_DOWNLOAD, final_name)
     log_path = temp_path + ".log"
-    
     font_cmd = ""
     if selected_font and selected_font != "NONE":
         f_path = os.path.join(BASE_FONT, uid, selected_font)
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
-
-    # Pre-allocate dummy file (Fix for instant refresh)
     try:
         with open(temp_path, 'w') as f: pass
     except: pass
-
     cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -c copy "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     subprocess.Popen(cmd, shell=True)
-    
     time.sleep(1)
     return redirect(url_for('index'))
 
@@ -162,10 +202,10 @@ def delete_file(filename):
         if os.path.exists(log_p): os.remove(log_p)
     return redirect(url_for('index'))
 
-# --- BIRTHDAY SURPRISE ROUTE ---
+# --- BIRTHDAY ROUTE (Uses String Template) ---
 @app.route('/party')
 def birthday_countdown():
-    return render_template('birthday.html')
+    return render_template_string(BIRTHDAY_HTML)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

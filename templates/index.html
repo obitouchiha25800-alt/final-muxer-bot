@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AD Web Muxer</title>
+    <style>
+        body {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: monospace;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .box {
+            background: #161b22;
+            padding: 20px;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            max-width: 700px;
+            margin: auto;
+        }
+
+        input,
+        select,
+        button {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            background: #0d1117;
+            color: white;
+            border: 1px solid #30363d;
+            border-radius: 5px;
+        }
+
+        .btn-green {
+            background: #238636;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .file-item {
+            background: #21262d;
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .progress-bar {
+            height: 5px;
+            background: #238636;
+            width: 0%;
+            transition: width 0.5s;
+        }
+
+        a {
+            text-decoration: none;
+            color: #58a6ff;
+        }
+    </style>
+    <script>
+        function updateProgress() {
+            document.querySelectorAll('.processing').forEach(div => {
+                let filename = div.getAttribute('data-name');
+                fetch('/progress/' + filename).then(r => r.json()).then(d => {
+                    div.querySelector('.progress-bar').style.width = d.percent + "%";
+                    div.querySelector('span').innerText = d.status;
+                    if (d.percent >= 100) setTimeout(() => location.reload(), 2000);
+                });
+            });
+        }
+        setInterval(updateProgress, 3000);
+    </script>
+</head>
+
+<body>
+    <h1>🚀 AD Web Muxer (Final)</h1>
+    <div class="box">
+        <form action="/mux" method="POST" enctype="multipart/form-data">
+            <input type="text" name="video_url" placeholder="Paste M3U8 Link" required>
+            <input type="file" name="subtitle" required>
+            <select name="font">
+                <option value="NONE">No Font</option>
+                {% for font in fonts %}<option value="{{ font }}">{{ font }}</option>{% endfor %}
+            </select>
+            <input type="text" name="filename" placeholder="Output Filename" required>
+            <button type="submit" class="btn-green">Start Muxing</button>
+        </form>
+        <hr style="border-color: #30363d;">
+        <form action="/upload_font" method="POST" enctype="multipart/form-data" style="display:flex; gap:10px;">
+            <input type="file" name="font_file" accept=".ttf,.otf" style="flex:2;">
+            <button type="submit" style="flex:1;">Upload Font</button>
+        </form>
+    </div>
+    <h3 style="margin-top: 30px;">📂 Your Files <button onclick="location.reload()"
+            style="width:auto; padding:5px 10px;">Refresh</button></h3>
+    <div style="max-width: 700px; margin: auto;">
+        {% for file in files %}
+        <div class="file-item {% if 'RUNNING_' in file %}processing{% endif %}" data-name="{{ file }}">
+            <div style="text-align: left; width: 100%;">
+                <div>{{ file }}</div>
+                {% if 'RUNNING_' in file %}
+                <div style="font-size: 0.8em; color: yellow;">Status: <span>Initializing...</span></div>
+                <div style="background:#333; height:5px; margin-top:5px;">
+                    <div class="progress-bar"></div>
+                </div>
+                {% else %}
+                <div style="margin-top:5px;"><a href="/downloads/{{ file }}" target="_blank" class="btn-green"
+                        style="padding: 3px 8px;">Download</a></div>
+                {% endif %}
+            </div>
+            {% if 'RUNNING_' not in file %}<a href="/delete/{{ file }}" style="color: red; font-size: 1.2em;">❌</a>{%
+            endif %}
+        </div>
+        {% endfor %}
+    </div>
+</body>
+
+</html>

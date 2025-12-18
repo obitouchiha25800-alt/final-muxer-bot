@@ -16,7 +16,11 @@
         }
         
         button { width: 100%; padding: 14px; margin-top: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; }
+        
+        /* Button Colors */
         .btn-green { background: #238636; color: white; transition: 0.3s; }
+        .btn-blue { background: #1f6feb; color: white; transition: 0.3s; } /* Refresh & Copy ke liye */
+        .btn-grey { background: #30363d; color: white; border: 1px solid #8b949e; } /* Upload Font ke liye (Visible) */
         
         .actions { display: flex; gap: 8px; margin-top: 10px; }
         .btn-dl { background: #238636; color: white; text-decoration: none; padding: 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; flex-grow: 2; text-align: center; display: flex; align-items: center; justify-content: center; }
@@ -31,14 +35,19 @@
         .status-text { font-size: 0.85rem; color: #e3b341; margin-bottom: 5px;}
     </style>
     <script>
+        let intervalId;
+
         function updateProgress() {
             document.querySelectorAll('.processing').forEach(div => {
                 let filename = div.getAttribute('data-name');
+                
                 fetch('/progress/' + filename + '?t=' + new Date().getTime())
                 .then(r => r.json())
                 .then(d => {
                     div.querySelector('.progress-bar').style.width = d.percent + "%";
+                    
                     if(d.percent >= 100) {
+                        clearInterval(intervalId);
                         div.querySelector('.status-text').innerText = "✅ Finalizing...";
                         div.querySelector('.status-text').style.color = "#39d353";
                         setTimeout(() => location.reload(), 1000);
@@ -53,7 +62,8 @@
             const link = window.location.origin + "/downloads/" + filename;
             navigator.clipboard.writeText(link).then(() => { alert("✅ Link Copied!"); }).catch(err => { prompt("Copy Link:", link); });
         }
-        setInterval(updateProgress, 1500);
+        
+        intervalId = setInterval(updateProgress, 1500);
     </script>
 </head>
 <body>
@@ -75,13 +85,13 @@
         
         <form action="/upload_font" method="POST" enctype="multipart/form-data" style="display:flex; gap:10px;">
             <input type="file" name="font_file" accept=".ttf,.otf" style="flex:1;">
-            <button type="submit" style="width:auto; padding: 10px; background:#161b22; border:1px solid #30363d;">Upload Font</button>
+            <button type="submit" class="btn-grey" style="width:auto; padding: 10px;">Upload Font</button>
         </form>
     </div>
 
     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
         <h3 style="margin:0;">📂 Files</h3>
-        <button onclick="location.reload()" style="width:auto; padding:5px 15px; margin:0; background:#1f6feb; color:white;">Refresh</button>
+        <button onclick="location.reload()" class="btn-blue" style="width:auto; padding:5px 15px; margin:0;">Refresh</button>
     </div>
 
     <div>

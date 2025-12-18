@@ -18,21 +18,17 @@
         button { width: 100%; padding: 14px; margin-top: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; }
         .btn-green { background: #238636; color: white; }
         
-        /* Actions & Buttons */
         .actions { display: flex; gap: 8px; margin-top: 10px; }
-        
         .btn-dl { 
             background: #238636; color: white; text-decoration: none; 
             padding: 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; 
             flex-grow: 2; text-align: center; display: flex; align-items: center; justify-content: center;
         }
-        
         .btn-copy { 
             background: #1f6feb; color: white; border: none; 
             padding: 10px; border-radius: 6px; font-size: 1.2rem; cursor: pointer; 
             flex-grow: 1; margin-top: 0;
         }
-        
         .btn-del { 
             background: transparent; border: 1px solid #da3633; color: #da3633; 
             padding: 10px; border-radius: 6px; font-size: 1.2rem; cursor: pointer; 
@@ -50,11 +46,21 @@
         function updateProgress() {
             document.querySelectorAll('.processing').forEach(div => {
                 let filename = div.getAttribute('data-name');
-                fetch('/progress/' + filename).then(r => r.json()).then(d => {
+                // Timestamp '?t=' lagaya taaki browser hamesha naya data laye
+                fetch('/progress/' + filename + '?t=' + new Date().getTime())
+                .then(r => r.json())
+                .then(d => {
                     div.querySelector('.progress-bar').style.width = d.percent + "%";
-                    div.querySelector('.status-text').innerText = d.status;
-                    if(d.percent >= 100) setTimeout(() => location.reload(), 2000);
-                });
+                    
+                    if(d.percent >= 100) {
+                        div.querySelector('.status-text').innerText = "✅ Finalizing... (Refreshing)";
+                        div.querySelector('.status-text').style.color = "#39d353";
+                        // 1 second mein refresh
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        div.querySelector('.status-text').innerText = d.status;
+                    }
+                }).catch(e => console.log("Waiting..."));
             });
         }
         
@@ -67,7 +73,8 @@
             });
         }
         
-        setInterval(updateProgress, 2500);
+        // Fast updates (1.5 seconds)
+        setInterval(updateProgress, 1500);
     </script>
 </head>
 <body>

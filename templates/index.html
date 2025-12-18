@@ -17,10 +17,25 @@
         
         button { width: 100%; padding: 14px; margin-top: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; }
         
-        /* Button Colors */
+        /* --- BUTTON COLORS --- */
         .btn-green { background: #238636; color: white; transition: 0.3s; }
-        .btn-blue { background: #1f6feb; color: white; transition: 0.3s; } /* Refresh & Copy ke liye */
-        .btn-grey { background: #30363d; color: white; border: 1px solid #8b949e; } /* Upload Font ke liye (Visible) */
+        
+        /* Refresh Button (Small & Blue) */
+        .btn-blue { 
+            background: #1f6feb; color: white; transition: 0.3s; 
+            font-size: 14px; padding: 6px 12px; 
+        } 
+        
+        /* Upload Font Button (Small, Grey & Subtle) */
+        .btn-grey { 
+            background: #21262d; /* Dark Grey */
+            color: #c9d1d9; 
+            border: 1px solid #30363d; 
+            font-size: 14px; /* Chhota Text */
+            padding: 8px 15px; /* Chhota Size */
+            transition: 0.2s;
+        }
+        .btn-grey:hover { border-color: #8b949e; }
         
         .actions { display: flex; gap: 8px; margin-top: 10px; }
         .btn-dl { background: #238636; color: white; text-decoration: none; padding: 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; flex-grow: 2; text-align: center; display: flex; align-items: center; justify-content: center; }
@@ -40,12 +55,10 @@
         function updateProgress() {
             document.querySelectorAll('.processing').forEach(div => {
                 let filename = div.getAttribute('data-name');
-                
                 fetch('/progress/' + filename + '?t=' + new Date().getTime())
                 .then(r => r.json())
                 .then(d => {
                     div.querySelector('.progress-bar').style.width = d.percent + "%";
-                    
                     if(d.percent >= 100) {
                         clearInterval(intervalId);
                         div.querySelector('.status-text').innerText = "✅ Finalizing...";
@@ -83,15 +96,15 @@
         
         <hr style="border-color: #30363d; margin: 15px 0;">
         
-        <form action="/upload_font" method="POST" enctype="multipart/form-data" style="display:flex; gap:10px;">
-            <input type="file" name="font_file" accept=".ttf,.otf" style="flex:1;">
-            <button type="submit" class="btn-grey" style="width:auto; padding: 10px;">Upload Font</button>
+        <form action="/upload_font" method="POST" enctype="multipart/form-data" style="display:flex; gap:10px; align-items:center;">
+            <input type="file" name="font_file" accept=".ttf,.otf" style="flex:1; margin:0;">
+            <button type="submit" class="btn-grey" style="width:auto; margin:0;">Upload Font</button>
         </form>
     </div>
 
-    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <h3 style="margin:0;">📂 Files</h3>
-        <button onclick="location.reload()" class="btn-blue" style="width:auto; padding:5px 15px; margin:0;">Refresh</button>
+        <button onclick="location.reload()" class="btn-blue" style="width:auto; margin:0;">Refresh</button>
     </div>
 
     <div>

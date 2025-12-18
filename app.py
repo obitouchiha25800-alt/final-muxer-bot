@@ -4,11 +4,13 @@ import time
 import re
 import shutil
 import json
-from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify
+import uuid
+from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session
 
 app = Flask(__name__)
-app.secret_key = "antigravity_final_key_2025"
+app.secret_key = "final_mobile_super_key_2025"
 
+# --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
 BASE_DOWNLOAD = 'downloads'
 BASE_FONT = 'User_Fonts'
@@ -17,10 +19,12 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
+# --- SESSION ID (Mobile Data Fix) ---
 def get_user_id():
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0].replace('.', '_')
-    return request.remote_addr.replace('.', '_').replace(':', '_')
+    # Agar user ke paas ID nahi hai, toh ek naya ID de do
+    if 'user_id' not in session:
+        session['user_id'] = str(uuid.uuid4())[:8]
+    return session['user_id']
 
 def get_service_status():
     if not os.path.exists(STATUS_FILE):
@@ -30,14 +34,27 @@ def get_service_status():
         with open(STATUS_FILE, 'r') as f: return json.load(f).get("active", True)
     except: return True
 
+# --- ROUTES ---
 @app.route('/')
 def index():
     uid = get_user_id()
     user_font_dir = os.path.join(BASE_FONT, uid)
     os.makedirs(user_font_dir, exist_ok=True)
     fonts = [f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))]
+    
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
-    user_files = [f for f in all_files if f.startswith(uid) or (f.startswith("RUNNING_") and uid in f)]
+    user_files = []
+    
+    for f in all_files:
+        # Log files ko list mein mat dikhao
+        if f.endswith('.log'): continue
+        
+        # Sirf User ki files dikhao
+        if f.startswith(uid) or (f.startswith("RUNNING_") and uid in f):
+            # Display Name ko saaf karo (ID hatao)
+            clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
+            user_files.append({'real_name': f, 'display_name': clean_name})
+            
     return render_template('index.html', files=user_files, fonts=fonts, is_active=get_service_status())
 
 @app.route('/upload_font', methods=['POST'])
@@ -72,42 +89,58 @@ def get_progress(filename):
 def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
+    
+    # Auto-Cleanup: Sirf user ki purani files delete karo
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
             except: pass
+
     m3u8_link = request.form.get('video_url')
     raw_filename = request.form.get('filename').replace(" ", "_")
     selected_font = request.form.get('font')
+    
     final_name = f"{uid}_{raw_filename}"
     if not final_name.endswith('.mkv'): final_name += ".mkv"
+    
     sub_file = request.files.get('subtitle')
     if not sub_file: return "Subtitle Required!"
     sub_path = os.path.join(BASE_UPLOAD, f"sub_{uid}_{int(time.time())}.ass")
     sub_file.save(sub_path)
+
     temp_name = f"RUNNING_{final_name}"
     temp_path = os.path.join(BASE_DOWNLOAD, temp_name)
     final_path = os.path.join(BASE_DOWNLOAD, final_name)
     log_path = temp_path + ".log"
+    
     font_cmd = ""
     if selected_font and selected_font != "NONE":
         f_path = os.path.join(BASE_FONT, uid, selected_font)
-        if os.path.exists(f_path): font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
+        if os.path.exists(f_path):
+            font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
+
     cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -c copy "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     subprocess.Popen(cmd, shell=True)
     return redirect(url_for('index'))
 
 @app.route('/downloads/<filename>')
 def download_file(filename):
-    if filename.startswith(get_user_id()): return send_from_directory(BASE_DOWNLOAD, filename)
-    return "⛔ Access Denied", 403
+    # PUBLIC DOWNLOAD LINK: Koi bhi download kar sake (Copy link ke liye zaruri)
+    # Check karein file exist karti hai ya nahi
+    if os.path.exists(os.path.join(BASE_DOWNLOAD, filename)):
+         # ID hata kar original naam se download karwayein
+        clean_name = filename.split('_', 1)[1] if '_' in filename else filename
+        return send_from_directory(BASE_DOWNLOAD, filename, as_attachment=True, download_name=clean_name)
+    return "⛔ File Not Found", 404
 
 @app.route('/delete/<filename>')
 def delete_file(filename):
+    # DELETE: Sirf wahi delete kar paye jisne banayi (Session Check)
     if filename.startswith(get_user_id()):
         path = os.path.join(BASE_DOWNLOAD, filename)
         if os.path.exists(path): os.remove(path)
-        if os.path.exists(path + ".log"): os.remove(path + ".log")
+        log_p = path + ".log"
+        if os.path.exists(log_p): os.remove(log_p)
     return redirect(url_for('index'))
 
 if __name__ == '__main__':

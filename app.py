@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session
 
 app = Flask(__name__)
-app.secret_key = "final_mobile_super_key_2025"
+app.secret_key = "final_ultra_fast_key_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -19,9 +19,20 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- SESSION ID (Mobile Data Fix) ---
+# --- CACHE BUSTER (Ye Naya Hai - Refresh Problem Fix) ---
+@app.after_request
+def add_header(r):
+    """
+    Browser ko force karta hai ki wo page save na kare.
+    Har baar fresh data aayega -> Refresh karne ki zarurat nahi padegi.
+    """
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    return r
+
+# --- SESSION ID ---
 def get_user_id():
-    # Agar user ke paas ID nahi hai, toh ek naya ID de do
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())[:8]
     return session['user_id']
@@ -46,12 +57,10 @@ def index():
     user_files = []
     
     for f in all_files:
-        # Log files ko list mein mat dikhao
         if f.endswith('.log'): continue
         
         # Sirf User ki files dikhao
         if f.startswith(uid) or (f.startswith("RUNNING_") and uid in f):
-            # Display Name ko saaf karo (ID hatao)
             clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
             user_files.append({'real_name': f, 'display_name': clean_name})
             
@@ -90,7 +99,7 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
-    # Auto-Cleanup: Sirf user ki purani files delete karo
+    # Auto-Cleanup
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
@@ -125,17 +134,13 @@ def mux_video():
 
 @app.route('/downloads/<filename>')
 def download_file(filename):
-    # PUBLIC DOWNLOAD LINK: Koi bhi download kar sake (Copy link ke liye zaruri)
-    # Check karein file exist karti hai ya nahi
     if os.path.exists(os.path.join(BASE_DOWNLOAD, filename)):
-         # ID hata kar original naam se download karwayein
         clean_name = filename.split('_', 1)[1] if '_' in filename else filename
         return send_from_directory(BASE_DOWNLOAD, filename, as_attachment=True, download_name=clean_name)
     return "⛔ File Not Found", 404
 
 @app.route('/delete/<filename>')
 def delete_file(filename):
-    # DELETE: Sirf wahi delete kar paye jisne banayi (Session Check)
     if filename.startswith(get_user_id()):
         path = os.path.join(BASE_DOWNLOAD, filename)
         if os.path.exists(path): os.remove(path)

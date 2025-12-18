@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session
 
 app = Flask(__name__)
-app.secret_key = "final_instant_refresh_key_2025"
+app.secret_key = "final_instant_fix_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -19,7 +19,7 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- CACHE BUSTER (No Refresh Glitch) ---
+# --- CACHE BUSTER (Browser ko purana page dikhane se roko) ---
 @app.after_request
 def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -93,6 +93,7 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
+    # Cleanup Old Files
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
@@ -121,11 +122,18 @@ def mux_video():
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
 
+    # --- YE HAI FIX: Force Create File Immediately ---
+    # Python pehle hi file bana dega taaki list mein dikh jaye
+    try:
+        with open(temp_path, 'w') as f: pass
+    except: pass
+    # ------------------------------------------------
+
     cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -c copy "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     subprocess.Popen(cmd, shell=True)
     
-    # --- MAGIC FIX: 2 Second Wait (Taaki file create ho jaye) ---
-    time.sleep(2)
+    # Ab zyada wait karne ki zarurat nahi, kyunki file humne bana di
+    time.sleep(1)
     
     return redirect(url_for('index'))
 

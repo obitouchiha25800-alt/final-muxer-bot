@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_birthday_fixed_time_2025"
+app.secret_key = "final_birthday_polished_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -39,7 +39,7 @@ def get_service_status():
         with open(STATUS_FILE, 'r') as f: return json.load(f).get("active", True)
     except: return True
 
-# --- HTML CODE (FIXED DATE: 19 DEC 2025) ---
+# --- POLISHED HTML CODE (FIXED DATE: 19 DEC 2025) ---
 BIRTHDAY_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -47,30 +47,74 @@ BIRTHDAY_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>For You ❤️</title>
-    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Poppins:wght@300;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #0d1117; color: white; font-family: 'Poppins', sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; overflow: hidden; padding: 20px; box-sizing: border-box; }
-        h1 { font-family: 'Poppins', sans-serif; font-size: 2rem; color: #ff7b72; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
-        .timer { font-size: 4rem; font-weight: bold; color: #238636; text-shadow: 0 0 20px #238636; margin: 20px 0; }
-        .message { font-family: 'Pacifico', cursive; font-size: 3.5rem; display: none; color: #a371f7; text-shadow: 0 0 10px rgba(163, 113, 247, 0.5); animation: pop 1s ease-in-out; line-height: 1.2; }
-        @keyframes pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        .sub-text { color: #c9d1d9; margin-top: 30px; font-size: 1.1rem; line-height: 1.6; max-width: 600px; background: rgba(22, 27, 34, 0.8); padding: 20px; border-radius: 15px; border: 1px solid #30363d; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .signature { margin-top: 20px; color: #58a6ff; font-weight: bold; font-size: 1.2rem; }
+        /* Premium Dark Gradient Background */
+        body { 
+            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+            color: white; 
+            font-family: 'Poppins', sans-serif; 
+            display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; 
+            min-height: 100vh; margin: 0; text-align: center; 
+            overflow-x: hidden; padding: 20px; box-sizing: border-box;
+        }
+        
+        /* Countdown Style */
+        h1 { font-family: 'Poppins', sans-serif; font-size: 1.8rem; color: #ff7b72; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
+        .timer { font-size: 3.5rem; font-weight: 700; color: #4ade80; text-shadow: 0 0 25px rgba(74, 222, 128, 0.6); margin: 15px 0; }
+        
+        /* Happy Birthday Title (Stylish & Adjusted Size) */
+        .message { 
+            font-family: 'Pacifico', cursive; 
+            font-size: 3rem; display: none; 
+            color: #c084fc; /* Soft Purple */
+            text-shadow: 0 0 15px rgba(192, 132, 252, 0.6);
+            animation: pop 1.2s cubic-bezier(0.34, 1.56, 0.64, 1); 
+            line-height: 1.1;
+            margin-bottom: 30px;
+            margin-top: 20px;
+        }
+        @keyframes pop { from { transform: scale(0.8) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
+        
+        /* The Paragraph Container (Glassmorphism Effect) */
+        .sub-text { 
+            color: #e6edf3; 
+            font-size: 1.05rem; 
+            line-height: 1.8; 
+            width: 100%; max-width: 550px; /* Responsive width */
+            background: rgba(30, 35, 45, 0.75); /* Semi-transparent dark */
+            padding: 35px 25px; 
+            border-radius: 30px; /* Softer corners */
+            border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle border */
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5); /* Deep shadow */
+            backdrop-filter: blur(12px); /* Frosted Glass Effect */
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        /* Paragraph Spacing */
+        .sub-text p { margin-bottom: 20px; }
+        .sub-text p:last-of-type { margin-bottom: 30px; }
+        
+        /* Final Line Highlight */
+        .final-line {
+            font-weight: 600; color: #ff9f43; font-size: 1.15rem; display: block;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
     <h1 id="title">Wait for the magic... ✨</h1>
     <div class="timer" id="countdown">00:00:00</div>
+    
     <div class="message" id="hbd">Happy Birthday<br>Bestie! 🎂</div>
+    
     <div class="sub-text" id="sign" style="display:none;">
-        Happy Birthday to the person who knows all my secrets and still chooses to be seen in public with me! 😜
-        <br><br>
-        On your special day, I just want to say thank you for being the most amazing human in my life. You are not just a friend; you are family. Life is simply better with you in it. May this year bring you as much happiness as you bring to everyone around you.
-        <br><br>
-        Keep shining, star! 🌟
-        <div class="signature">- With Love, Your Bestu ❤️</div>
+        <p>Happy Birthday to the person who knows all my secrets and still chooses to be seen in public with me! 😜</p>
+        <p>On your special day, I just want to say thank you for being the most amazing human in my life. You are not just a friend; you are family. Life is simply better with you in it. May this year bring you as much happiness as you bring to everyone around you.</p>
+        <span class="final-line">Keep shining, star! 🌟</span>
     </div>
+
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const isTest = urlParams.get('test');
@@ -78,11 +122,10 @@ BIRTHDAY_HTML = """
         let targetTime;
         
         if (isTest) {
-            // Test Mode: 3 Seconds from now
+            // Test Mode: 3 Seconds baad
             targetTime = new Date().getTime() + 3000;
         } else {
-            // REAL MODE: FIXED DATE -> Dec 19, 2025 00:00:00
-            // Ye kabhi galat nahi hoga
+            // REAL MODE: Aaj Raat 12 Baje (Dec 19, 2025 00:00:00)
             targetTime = new Date("December 19, 2025 00:00:00").getTime();
         }
 
@@ -95,7 +138,6 @@ BIRTHDAY_HTML = """
                 document.getElementById('title').style.display = 'none';
                 document.getElementById('hbd').style.display = 'block';
                 document.getElementById('sign').style.display = 'block';
-                document.body.style.backgroundImage = "radial-gradient(circle, #161b22 0%, #0d1117 100%)";
                 launchConfetti();
                 clearInterval(interval);
                 return;
@@ -111,8 +153,8 @@ BIRTHDAY_HTML = """
             var duration = 15 * 1000;
             var end = Date.now() + duration;
             (function frame() {
-                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
-                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#a864fd', '#29cdff', '#78ff44', '#ff718d', '#fdff6a'] });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#a864fd', '#29cdff', '#78ff44', '#ff718d', '#fdff6a'] });
                 if (Date.now() < end) requestAnimationFrame(frame);
             }());
         }

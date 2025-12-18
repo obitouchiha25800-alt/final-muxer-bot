@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_birthday_edition_2025"
+app.secret_key = "final_birthday_bestie_english_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -39,34 +39,77 @@ def get_service_status():
         with open(STATUS_FILE, 'r') as f: return json.load(f).get("active", True)
     except: return True
 
-# --- HTML CODE INSIDE PYTHON (NO FILE NEEDED) ---
+# --- STYLISH BIRTHDAY HTML (INSIDE PYTHON) ---
 BIRTHDAY_HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Surprise! 🎂</title>
+    <title>For You ❤️</title>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Poppins:wght@300;600&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #0d1117; color: white; font-family: 'Arial', sans-serif; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; overflow: hidden; }
-        h1 { font-size: 2rem; color: #58a6ff; margin-bottom: 20px; }
+        body { 
+            background-color: #0d1117; color: white; 
+            font-family: 'Poppins', sans-serif; /* Clean Font for Body */
+            display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; 
+            height: 100vh; margin: 0; text-align: center; 
+            overflow: hidden; padding: 20px; box-sizing: border-box;
+        }
+        
+        /* Countdown Style */
+        h1 { font-family: 'Poppins', sans-serif; font-size: 2rem; color: #ff7b72; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 2px; }
         .timer { font-size: 4rem; font-weight: bold; color: #238636; text-shadow: 0 0 20px #238636; margin: 20px 0; }
-        .message { font-size: 3rem; display: none; color: #ff7b72; animation: pop 1s infinite alternate; text-transform: uppercase; }
-        @keyframes pop { from { transform: scale(1); } to { transform: scale(1.1); } }
-        .sub-text { color: #8b949e; margin-top: 20px; font-size: 1.2rem; }
+        
+        /* Happy Birthday Title (Stylish) */
+        .message { 
+            font-family: 'Pacifico', cursive; /* Beautiful Handwriting Font */
+            font-size: 3.5rem; display: none; 
+            color: #a371f7; 
+            text-shadow: 0 0 10px rgba(163, 113, 247, 0.5);
+            animation: pop 1s ease-in-out; 
+            line-height: 1.2;
+        }
+        @keyframes pop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* The Big English Paragraph */
+        .sub-text { 
+            color: #c9d1d9; margin-top: 30px; font-size: 1.1rem; 
+            line-height: 1.6; max-width: 600px; 
+            background: rgba(22, 27, 34, 0.8);
+            padding: 20px; border-radius: 15px; border: 1px solid #30363d;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        
+        .signature { margin-top: 20px; color: #58a6ff; font-weight: bold; font-size: 1.2rem; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
-    <h1 id="title">Wait for it... ❤️</h1>
+
+    <h1 id="title">Wait for the magic... ✨</h1>
+    
     <div class="timer" id="countdown">00:00:00</div>
-    <div class="message" id="hbd">🎉 HAPPY BIRTHDAY BESTIE! 🎂</div>
-    <div class="sub-text" id="sign" style="display:none;">From your crazy Bestu ❤️</div>
+    
+    <div class="message" id="hbd">Happy Birthday<br>Bestie! 🎂</div>
+    
+    <div class="sub-text" id="sign" style="display:none;">
+        Happy Birthday to the person who knows all my secrets and still chooses to be seen in public with me! 😜
+        <br><br>
+        On your special day, I just want to say thank you for being the most amazing human in my life. You are not just a friend; you are family. Life is simply better with you in it. May this year bring you as much happiness as you bring to everyone around you. 
+        <br><br>
+        Keep shining, star! 🌟
+        <div class="signature">- With Love, Your Bestu ❤️</div>
+    </div>
+
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const isTest = urlParams.get('test');
         const now = new Date();
         const target = new Date();
+        
+        // Logic: Agar test=1 hai toh 3 second, warna raat ke 12 baje
         if (isTest) { target.setTime(now.getTime() + 3000); } 
         else { target.setHours(24, 0, 0, 0); }
         
@@ -78,7 +121,8 @@ BIRTHDAY_HTML = """
                 document.getElementById('title').style.display = 'none';
                 document.getElementById('hbd').style.display = 'block';
                 document.getElementById('sign').style.display = 'block';
-                document.body.style.backgroundColor = '#161b22';
+                // Background thoda party wala
+                document.body.style.backgroundImage = "radial-gradient(circle, #161b22 0%, #0d1117 100%)";
                 launchConfetti();
                 clearInterval(interval);
                 return;
@@ -202,7 +246,7 @@ def delete_file(filename):
         if os.path.exists(log_p): os.remove(log_p)
     return redirect(url_for('index'))
 
-# --- BIRTHDAY ROUTE (Uses String Template) ---
+# --- BIRTHDAY ROUTE ---
 @app.route('/party')
 def birthday_countdown():
     return render_template_string(BIRTHDAY_HTML)

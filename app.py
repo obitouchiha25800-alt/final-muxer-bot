@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session
 
 app = Flask(__name__)
-app.secret_key = "final_ultimate_fix_2025"
+app.secret_key = "final_birthday_edition_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -19,7 +19,7 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- CACHE BUSTER ---
+# --- CACHE BUSTER (No Refresh Glitch) ---
 @app.after_request
 def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -72,9 +72,11 @@ def upload_font():
 @app.route('/progress/<filename>')
 def get_progress(filename):
     clean_name = filename.replace("RUNNING_", "")
+    # Check 1: File Ban Gayi?
     if os.path.exists(os.path.join(BASE_DOWNLOAD, clean_name)):
         return jsonify({"percent": 100, "status": "✅ Done"})
 
+    # Check 2: Log File
     log_file = os.path.join(BASE_DOWNLOAD, filename + ".log")
     if not os.path.exists(log_file): 
         return jsonify({"percent": 0, "status": "Starting..."})
@@ -104,6 +106,7 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
+    # Cleanup Old Files
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
@@ -132,6 +135,7 @@ def mux_video():
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
 
+    # Pre-allocate dummy file (Fix for instant refresh)
     try:
         with open(temp_path, 'w') as f: pass
     except: pass
@@ -157,6 +161,11 @@ def delete_file(filename):
         log_p = path + ".log"
         if os.path.exists(log_p): os.remove(log_p)
     return redirect(url_for('index'))
+
+# --- BIRTHDAY SURPRISE ROUTE ---
+@app.route('/party')
+def birthday_countdown():
+    return render_template('birthday.html')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

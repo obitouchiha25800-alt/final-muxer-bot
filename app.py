@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session
 
 app = Flask(__name__)
-app.secret_key = "final_ultra_fast_key_2025"
+app.secret_key = "final_instant_refresh_key_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -19,13 +19,9 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- CACHE BUSTER (Ye Naya Hai - Refresh Problem Fix) ---
+# --- CACHE BUSTER (No Refresh Glitch) ---
 @app.after_request
 def add_header(r):
-    """
-    Browser ko force karta hai ki wo page save na kare.
-    Har baar fresh data aayega -> Refresh karne ki zarurat nahi padegi.
-    """
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     r.headers["Pragma"] = "no-cache"
     r.headers["Expires"] = "0"
@@ -58,8 +54,6 @@ def index():
     
     for f in all_files:
         if f.endswith('.log'): continue
-        
-        # Sirf User ki files dikhao
         if f.startswith(uid) or (f.startswith("RUNNING_") and uid in f):
             clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
             user_files.append({'real_name': f, 'display_name': clean_name})
@@ -99,7 +93,6 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
-    # Auto-Cleanup
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
@@ -130,6 +123,10 @@ def mux_video():
 
     cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -c copy "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     subprocess.Popen(cmd, shell=True)
+    
+    # --- MAGIC FIX: 2 Second Wait (Taaki file create ho jaye) ---
+    time.sleep(2)
+    
     return redirect(url_for('index'))
 
 @app.route('/downloads/<filename>')

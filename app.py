@@ -7,7 +7,7 @@ import re
 from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = "vibe_coder_edition_2025"
+app.secret_key = "mobile_ui_fix_2025"
 
 # --- FOLDERS ---
 BASE_DIR = os.getcwd()
@@ -31,9 +31,7 @@ def get_uid():
 # --- PROGRESS CALCULATION HELPER ---
 def calculate_progress(log_content):
     try:
-        # Find Duration (Total Time)
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", log_content)
-        # Find Current Time
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", log_content)
         
         if duration_match and time_matches:
@@ -49,10 +47,10 @@ def calculate_progress(log_content):
             
             if total_sec > 0:
                 percent = int((current_sec / total_sec) * 100)
-                return min(percent, 100) # Max 100
+                return min(percent, 100)
     except:
         pass
-    return 0 # Default if fail
+    return 0
 
 # --- UI CODE ---
 HTML_CODE = """
@@ -65,41 +63,60 @@ HTML_CODE = """
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root { --primary: #7000ff; --accent: #00ccff; --bg: #0a0a0c; --card: #16161a; --text: #e0e0e0; }
+        * { box-sizing: border-box; }
         body { background-color: var(--bg); color: var(--text); font-family: 'Poppins', sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        
+        /* Glassmorphism Container */
         .container { background: rgba(22, 22, 26, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        
         h1 { font-weight: 600; text-align: center; margin-bottom: 25px; background: linear-gradient(90deg, var(--accent), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2rem; }
+        
+        /* Mobile Responsive Fixes */
+        @media (max-width: 600px) {
+            body { padding: 10px; } /* Side gap kam kiya */
+            .container { padding: 20px 15px; border-radius: 16px; } /* Container padding optimized */
+            h1 { font-size: 1.8rem; margin-bottom: 20px; }
+            .btn-submit { padding: 12px; font-size: 0.95rem; }
+            .input-group { margin-bottom: 12px; }
+        }
+
         .input-group { margin-bottom: 15px; text-align: left; }
         label { font-size: 0.85rem; color: #888; margin-bottom: 5px; display: block; }
-        input[type="text"], select { width: 100%; padding: 12px; background: #0f0f12; border: 1px solid #333; border-radius: 8px; color: white; font-family: inherit; box-sizing: border-box; transition: 0.3s; }
+        input[type="text"], select { width: 100%; padding: 12px; background: #0f0f12; border: 1px solid #333; border-radius: 8px; color: white; font-family: inherit; font-size: 0.9rem; transition: 0.3s; }
         input[type="text"]:focus, select:focus { border-color: var(--accent); outline: none; }
+        
         .file-upload { position: relative; display: flex; align-items: center; justify-content: space-between; background: #0f0f12; border: 1px dashed #444; padding: 10px; border-radius: 8px; cursor: pointer; transition: 0.3s; }
         .file-upload:hover { border-color: var(--primary); }
         .file-upload input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-        .file-text { font-size: 0.9rem; color: #aaa; }
+        .file-text { font-size: 0.85rem; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
         .file-icon { color: var(--accent); font-size: 1.2rem; }
+
         .btn-submit { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary), #a200ff); color: white; border: none; border-radius: 10px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; box-shadow: 0 4px 15px rgba(112, 0, 255, 0.4); }
         .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(112, 0, 255, 0.6); }
-        .divider { border-bottom: 1px solid rgba(255,255,255,0.1); margin: 30px 0; }
-        .refresh-btn { background: #222; color: #aaa; border: 1px solid #333; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; transition: 0.2s; }
+        
+        .divider { border-bottom: 1px solid rgba(255,255,255,0.1); margin: 25px 0; }
+        .refresh-btn { background: #222; color: #aaa; border: 1px solid #333; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 0.75rem; transition: 0.2s; }
         .refresh-btn:hover { color: white; border-color: white; }
+
         .file-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid rgba(255,255,255,0.05); }
         .file-header { display: flex; justify-content: space-between; align-items: center; }
-        .file-name { font-weight: 600; font-size: 0.95rem; color: #fff; word-break: break-all; }
+        .file-name { font-weight: 600; font-size: 0.9rem; color: #fff; word-break: break-all; }
+        
         .status { padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
         .status.done { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
         .status.processing { background: rgba(255, 187, 0, 0.15); color: #ffbb00; }
         .status.error { background: rgba(255, 50, 50, 0.15); color: #ff3232; }
         
-        /* PROGRESS BAR STYLES */
-        .progress-track { width: 100%; height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        .progress-track { width: 100%; height: 6px; background: #222; border-radius: 4px; overflow: hidden; margin-top: 5px; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--primary)); width: 0%; transition: width 0.5s ease; border-radius: 4px; box-shadow: 0 0 10px var(--accent); }
-        .progress-text { font-size: 0.75rem; color: #aaa; text-align: right; margin-top: 2px; }
+        .progress-text { font-size: 0.7rem; color: #aaa; text-align: right; margin-top: 2px; }
 
         .log-box { font-family: monospace; font-size: 0.7rem; color: #aaa; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; max-height: 100px; overflow-y: auto; }
-        .actions { display: flex; gap: 10px; margin-top: 5px; }
+        
+        .actions { display: flex; gap: 8px; margin-top: 5px; }
         .btn-dl { flex: 1; text-align: center; background: rgba(0, 204, 255, 0.1); color: var(--accent); padding: 8px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600; transition: 0.2s; }
         .btn-dl:hover { background: var(--accent); color: #000; }
-        .btn-del { width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; color: #666; border: 1px solid #333; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: 0.2s; }
+        .btn-del { width: 32px; display: flex; align-items: center; justify-content: center; background: transparent; color: #666; border: 1px solid #333; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: 0.2s; }
         .btn-del:hover { border-color: #ff3232; color: #ff3232; }
     </style>
     <script>
@@ -137,7 +154,7 @@ HTML_CODE = """
                         <option value="{{ font }}">{{ font }}</option>
                     {% endfor %}
                 </select>
-                <div style="text-align:center; font-size:0.8rem; color:#666; margin-bottom:8px;">OR</div>
+                <div style="text-align:center; font-size:0.75rem; color:#555; margin-bottom:8px;">OR</div>
                 {% endif %}
                 <div class="file-upload">
                     <span class="file-text" id="font-name">Upload New .TTF/.OTF</span>
@@ -157,8 +174,8 @@ HTML_CODE = """
         <div class="divider"></div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <span style="color:#888; font-size:0.9rem;">Files</span>
-            <button onclick="location.reload()" class="refresh-btn">🔄 Refresh Status</button>
+            <span style="color:#888; font-size:0.85rem;">Recent Files</span>
+            <button onclick="location.reload()" class="refresh-btn">🔄 Status</button>
         </div>
         
         <div>
@@ -198,7 +215,7 @@ HTML_CODE = """
                     {% endif %}
                 </div>
             {% else %}
-                <div style="text-align:center; color:#444; padding:20px; font-size:0.9rem;">
+                <div style="text-align:center; color:#444; padding:20px; font-size:0.85rem;">
                     No files yet. Start muxing! 🚀
                 </div>
             {% endfor %}
@@ -213,13 +230,11 @@ def home():
     uid = get_uid()
     files_data = []
     
-    # Saved Fonts Logic
     saved_fonts_list = []
     if os.path.exists(FONT_FOLDER):
         raw_fonts = sorted([f for f in os.listdir(FONT_FOLDER) if f.startswith(uid)])
         saved_fonts_list = [f.replace(f"{uid}_", "") for f in raw_fonts]
 
-    # File List Logic
     if os.path.exists(DOWNLOAD_FOLDER):
         for f in sorted(os.listdir(DOWNLOAD_FOLDER)):
             if f.startswith(uid) and f.endswith(".mkv"):
@@ -232,20 +247,16 @@ def home():
                     try:
                         with open(log_file, 'r', encoding='utf-8', errors='ignore') as lf:
                             content = lf.read()
-                            
-                            # Calculate Percentage
                             percent = calculate_progress(content)
                             
-                            # Determine Status
                             if "Error" in content or "Invalid data" in content or "403 Forbidden" in content:
                                 status = "error"
-                                log_tail = content[-300:] # Show last 300 chars of error
+                                log_tail = content[-300:] 
                             elif "muxing overhead" in content or "LSIZE" in content: 
                                 status = "done"
                                 percent = 100
                             else:
                                 status = "processing"
-                                # Show last bit of log to see movement
                                 log_tail = content[-150:] if content else "Starting..."
                     except: status = "processing"
                 
@@ -272,7 +283,6 @@ def start_mux():
     sub_path = os.path.join(UPLOAD_FOLDER, f"{uid}_sub.ass")
     sub_file.save(sub_path)
     
-    # Font Logic
     font_arg = []
     final_font_path = None
     font_file = request.files.get('font')
@@ -308,7 +318,6 @@ def start_mux():
     
     cmd.extend(font_arg)
     
-    # Map Fix + Copy
     cmd.extend([
         '-map', '0:V',
         '-map', '0:a',

@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_pro_max_muxer_2025"
+app.secret_key = "final_fixed_syntax_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
@@ -41,7 +41,7 @@ def get_service_status():
         with open(STATUS_FILE, 'r') as f: return json.load(f).get("active", True)
     except: return True
 
-# --- HTML UI (MUXER + FONT MANAGER) ---
+# --- HTML UI ---
 INDEX_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -351,8 +351,12 @@ def mux_video():
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
 
-    try: with open(temp_path, 'w') as f: pass
-    except: pass
+    # Fixed syntax here (split into multiple lines)
+    try: 
+        with open(temp_path, 'w') as f: 
+            pass
+    except: 
+        pass
 
     cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -c copy "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     subprocess.Popen(cmd, shell=True)

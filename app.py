@@ -11,7 +11,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_no_delete_bug_2025"
+app.secret_key = "final_rock_solid_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -27,25 +27,19 @@ TASKS = {}
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- AUTO-CLEANER (Background) ---
+# --- AUTO-CLEANER (Background Only - 30 Mins) ---
 def clean_old_files():
     while True:
         try:
             now = time.time()
-            retention_period = 1800 # 30 Mins (Adhe ghante baad safai)
+            retention_period = 1800 # 30 Mins
             for folder in [BASE_DOWNLOAD, BASE_UPLOAD]:
                 for f in os.listdir(folder):
                     f_path = os.path.join(folder, f)
                     if os.path.isfile(f_path):
-                        # Agar file 30 min purani hai toh udao
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
-            
-            # Clean dead tasks from memory
-            keys_to_remove = [k for k, p in TASKS.items() if p.poll() is not None]
-            for k in keys_to_remove:
-                del TASKS[k]
         except: pass
         time.sleep(600)
 
@@ -151,7 +145,7 @@ INDEX_HTML = """
     </script>
 </head>
 <body>
-    <h1>🚀 AD Web Muxer!!</h1>
+    <h1>🚀 AD Web Muxer !!</h1>
     
     <div class="box">
         <form action="/mux" method="POST" enctype="multipart/form-data" onsubmit="document.querySelector('.btn-green').innerText='⏳ Starting...'; document.querySelector('.btn-green').style.opacity='0.7';">
@@ -233,8 +227,7 @@ def index():
     user_font_dir = get_user_font_dir()
     fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
     
-    # --- BUG FIX: Removed Auto-Delete logic from here ---
-    # Sirf list banayenge, delete nahi karenge
+    # --- NO AUTO-DELETE HERE (This was the problem) ---
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
     
@@ -272,8 +265,12 @@ def get_progress(filename):
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        if "Error" in content or "Invalid data" in content or "Server returned 40" in content or "Forbidden" in content:
-             return jsonify({"percent": 0, "status": "❌ Error! Check URL/Format"})
+        # Check for specific errors
+        if "403 Forbidden" in content or "Server returned 403" in content:
+             return jsonify({"percent": 0, "status": "❌ Error 403: Link Protected"})
+             
+        if "Error" in content or "Invalid data" in content:
+             return jsonify({"percent": 0, "status": "❌ Error! Check Log"})
         
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", content)
@@ -294,13 +291,9 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
-    # Cleanup Old (Sirf purani files, abhi wali nahi)
-    for f in os.listdir(BASE_DOWNLOAD):
-        if f.startswith(uid) and not f.startswith("RUNNING_"):
-             # Only delete COMPLETED files from list to keep list clean, 
-             # but let's keep it simple: Don't delete anything on new task to avoid confusion
-             pass
-
+    # Simple Cleanup: Only delete OLD COMPLETED files, never active ones
+    # We will skip cleanup here to be safe, rely on Background Cleaner
+    
     m3u8_link = request.form.get('video_url')
     raw_filename = request.form.get('filename').strip()
     selected_font = request.form.get('font')

@@ -11,7 +11,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_rock_solid_2025"
+app.secret_key = "final_ultimate_nodelete_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -28,6 +28,7 @@ for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
 # --- AUTO-CLEANER (Background Only - 30 Mins) ---
+# Ye sirf tabhi delete karega jab file 30 minute purani ho jaye.
 def clean_old_files():
     while True:
         try:
@@ -40,6 +41,11 @@ def clean_old_files():
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
+            
+            # Memory cleanup
+            keys_to_remove = [k for k, p in TASKS.items() if p.poll() is not None]
+            for k in keys_to_remove:
+                del TASKS[k]
         except: pass
         time.sleep(600)
 
@@ -81,7 +87,7 @@ INDEX_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AD Web Muxer!!</title>
+    <title>AD Web Muxer !!</title>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 15px; margin: 0; text-align: center; }
         h1 { font-size: 1.5rem; margin-bottom: 20px; color: #58a6ff; }
@@ -227,7 +233,7 @@ def index():
     user_font_dir = get_user_font_dir()
     fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
     
-    # --- NO AUTO-DELETE HERE (This was the problem) ---
+    # --- LIST FILES (No Auto-Delete Here) ---
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
     
@@ -265,12 +271,8 @@ def get_progress(filename):
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        # Check for specific errors
-        if "403 Forbidden" in content or "Server returned 403" in content:
-             return jsonify({"percent": 0, "status": "❌ Error 403: Link Protected"})
-             
-        if "Error" in content or "Invalid data" in content:
-             return jsonify({"percent": 0, "status": "❌ Error! Check Log"})
+        if "Error" in content or "Invalid data" in content or "Server returned 40" in content or "Forbidden" in content:
+             return jsonify({"percent": 0, "status": "❌ Error! Check URL/Format"})
         
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", content)
@@ -291,8 +293,8 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
-    # Simple Cleanup: Only delete OLD COMPLETED files, never active ones
-    # We will skip cleanup here to be safe, rely on Background Cleaner
+    # DO NOT DELETE OLD FILES HERE AUTOMATICALLY
+    # Let the background cleaner handle it or user delete it.
     
     m3u8_link = request.form.get('video_url')
     raw_filename = request.form.get('filename').strip()

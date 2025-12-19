@@ -10,7 +10,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "back_to_basics_stable_2025"
+app.secret_key = "final_mux_engine_fix_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -23,9 +23,7 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- SIMPLE AUTO-CLEANER (No RAM dependency) ---
-# Ye sirf tabhi delete karega jab file 30 minute se zyada purani ho.
-# Ye kabhi bhi "Active" file ko nahi chedega.
+# --- AUTO-CLEANER (Safe Mode) ---
 def clean_old_files():
     while True:
         try:
@@ -35,12 +33,12 @@ def clean_old_files():
                 for f in os.listdir(folder):
                     f_path = os.path.join(folder, f)
                     if os.path.isfile(f_path):
-                        # Agar file 30 min purani hai toh udao
+                        # Sirf bahut purani files udao, active nahi
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
         except: pass
-        time.sleep(600) # Check every 10 mins
+        time.sleep(600)
 
 threading.Thread(target=clean_old_files, daemon=True).start()
 
@@ -123,12 +121,14 @@ INDEX_HTML = """
                         div.querySelector('.status-text').innerText = d.status;
                         div.querySelector('.status-text').style.color = "#ff7b72";
                         div.querySelector('.progress-bar').style.backgroundColor = "#ff7b72";
+                        // Stop updating this specific item
+                        div.classList.remove('processing');
                     } else {
                         div.querySelector('.progress-bar').style.width = d.percent + "%";
                         if(d.percent >= 100) {
                             div.querySelector('.status-text').innerText = "✅ Finalizing...";
                             div.querySelector('.status-text').style.color = "#39d353";
-                            setTimeout(() => location.reload(), 1000);
+                            setTimeout(() => location.reload(), 2000);
                         } else {
                             div.querySelector('.status-text').innerText = d.status;
                         }
@@ -140,7 +140,7 @@ INDEX_HTML = """
             const link = window.location.origin + "/downloads/" + filename;
             navigator.clipboard.writeText(link).then(() => { alert("✅ Link Copied!"); }).catch(err => { prompt("Copy Link:", link); });
         }
-        intervalId = setInterval(updateProgress, 1500);
+        intervalId = setInterval(updateProgress, 2000);
     </script>
 </head>
 <body>
@@ -196,6 +196,9 @@ INDEX_HTML = """
                     <div style="margin-top:10px;">
                         <div class="status-text">⏳ Initializing...</div>
                         <div class="progress-container"><div class="progress-bar"></div></div>
+                        <div style="margin-top: 10px; text-align: right;">
+                             <a href="/cancel/{{ file.real_name }}" class="btn-red">❌ Force Stop</a>
+                        </div>
                     </div>
                 {% else %}
                     <div class="actions">
@@ -223,7 +226,6 @@ def index():
     user_font_dir = get_user_font_dir()
     fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
     
-    # --- SAFE LISTING (No Deletion Logic) ---
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
     
@@ -261,12 +263,14 @@ def get_progress(filename):
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        # Check for Protected Link Error
+        # --- ENHANCED ERROR DETECTION ---
+        # Catch specific errors from logs to show user
         if "403 Forbidden" in content or "Server returned 403" in content:
-             return jsonify({"percent": 0, "status": "❌ Error 403: Link Protected"})
-             
-        if "Error" in content or "Invalid data" in content:
-             return jsonify({"percent": 0, "status": "❌ Error! Check Log"})
+             return jsonify({"percent": 0, "status": "❌ Error 403: Link Rejected (Expired/Protected)"})
+        if "No such file" in content:
+             return jsonify({"percent": 0, "status": "❌ Error: Link Broken"})
+        if "Invalid data" in content:
+             return jsonify({"percent": 0, "status": "❌ Error: Invalid Video Data"})
         
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", content)
@@ -313,23 +317,49 @@ def mux_video():
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
 
+    # Create dummy file to show in UI immediately
     try: open(temp_path, 'w').close()
     except: pass
 
-    # BYPASS USER AGENT & REFERER (Kept this fix)
-    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    # --- ULTIMATE HEADERS ---
+    # Sab kuch fake kar diya taaki server block na kare
+    headers = 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n'
+    headers += f'Referer: {m3u8_link}\r\n'
+    headers += 'Accept: */*\r\n'
+    headers += 'Accept-Language: en-US,en;q=0.9\r\n'
     
-    # Removed TASKS tracking. Just fire and forget.
+    # FFmpeg command that mimics a browser
     cmd = (
-        f'ffmpeg -y -user_agent "{user_agent}" -headers "Referer: {m3u8_link}" -tls_verify 0 '
+        f'ffmpeg -y '
+        f'-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" '
+        f'-headers "{headers}" '
+        f'-protocol_whitelist file,http,https,tcp,tls,crypto '  # ALLOW ALL PROTOCOLS
         f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 '
         f'-i "{m3u8_link}" -i "{sub_path}"{font_cmd} '
         f'-map 0 -map 1 -c copy -disposition:s:0 default '
         f'"{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     )
     
+    # Run in background without tracking (Fire & Forget)
     subprocess.Popen(cmd, shell=True)
+
     time.sleep(1)
+    return redirect(url_for('index'))
+
+@app.route('/cancel/<filename>')
+def cancel_task(filename):
+    if filename.startswith(get_user_id()):
+        # Manual cleanup (Since we don't track process ID anymore for stability)
+        try:
+            path = os.path.join(BASE_DOWNLOAD, filename)
+            if os.path.exists(path): os.remove(path)
+            log_path = path + ".log"
+            if os.path.exists(log_path): os.remove(log_path)
+            
+            # Note: The background ffmpeg might still run for a bit until it errors out writing to missing file, 
+            # but it clears the UI immediately.
+        except: pass
+        
     return redirect(url_for('index'))
 
 @app.route('/downloads/<filename>')

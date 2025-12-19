@@ -7,7 +7,7 @@ import re
 from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = "mobile_ui_fix_2025"
+app.secret_key = "final_vibe_fix_2025"
 
 # --- FOLDERS ---
 BASE_DIR = os.getcwd()
@@ -73,8 +73,8 @@ HTML_CODE = """
         
         /* Mobile Responsive Fixes */
         @media (max-width: 600px) {
-            body { padding: 10px; } /* Side gap kam kiya */
-            .container { padding: 20px 15px; border-radius: 16px; } /* Container padding optimized */
+            body { padding: 10px; }
+            .container { padding: 20px 15px; border-radius: 16px; }
             h1 { font-size: 1.8rem; margin-bottom: 20px; }
             .btn-submit { padding: 12px; font-size: 0.95rem; }
             .input-group { margin-bottom: 12px; }
@@ -114,8 +114,10 @@ HTML_CODE = """
         .log-box { font-family: monospace; font-size: 0.7rem; color: #aaa; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; max-height: 100px; overflow-y: auto; }
         
         .actions { display: flex; gap: 8px; margin-top: 5px; }
-        .btn-dl { flex: 1; text-align: center; background: rgba(0, 204, 255, 0.1); color: var(--accent); padding: 8px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600; transition: 0.2s; }
+        .btn-dl { flex: 2; text-align: center; background: rgba(0, 204, 255, 0.1); color: var(--accent); padding: 8px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600; transition: 0.2s; }
         .btn-dl:hover { background: var(--accent); color: #000; }
+        .btn-copy { flex: 1; border: 1px solid #444; background: transparent; color: #ccc; border-radius: 6px; cursor: pointer; transition: 0.2s; font-size: 0.85rem; }
+        .btn-copy:hover { border-color: var(--primary); color: var(--primary); }
         .btn-del { width: 32px; display: flex; align-items: center; justify-content: center; background: transparent; color: #666; border: 1px solid #333; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: 0.2s; }
         .btn-del:hover { border-color: #ff3232; color: #ff3232; }
     </style>
@@ -123,6 +125,14 @@ HTML_CODE = """
         function updateFileName(input, id) {
             const name = input.files[0] ? input.files[0].name : "Choose File...";
             document.getElementById(id).innerText = name;
+        }
+        function copyLink(filename) {
+            const link = window.location.origin + "/download/" + filename;
+            navigator.clipboard.writeText(link).then(() => {
+                alert("✅ Link Copied!\\n" + link);
+            }).catch(err => {
+                prompt("Copy this link:", link);
+            });
         }
     </script>
 </head>
@@ -207,6 +217,7 @@ HTML_CODE = """
                     <div class="actions">
                         {% if file.status == 'done' %}
                             <a href="/download/{{ file.realname }}" class="btn-dl">⬇ Download</a>
+                            <button onclick="copyLink('{{ file.realname }}')" class="btn-copy">📋 Copy</button>
                         {% else %}
                              <div style="flex:1;"></div>
                         {% endif %}
@@ -260,6 +271,7 @@ def home():
                                 log_tail = content[-150:] if content else "Starting..."
                     except: status = "processing"
                 
+                # CLEAN DISPLAY NAME (Removing UID and Extension)
                 display_name = f.replace(f"{uid}_", "").replace(".mkv", "")
                 
                 files_data.append({
@@ -277,7 +289,10 @@ def start_mux():
     uid = get_uid()
     
     url = request.form.get('url')
-    fname = request.form.get('fname').strip().replace(" ", "_")
+    # CLEAN FILENAME LOGIC: Strip spaces but DO NOT replace them with underscores for internal logic if user wants clean UI.
+    # However, for file system safety, it's safer to keep underscores internally, but we showed clean name in UI above.
+    # User asked to remove underscores. I will allow spaces in filename now.
+    fname = request.form.get('fname').strip() 
     
     sub_file = request.files.get('sub')
     sub_path = os.path.join(UPLOAD_FOLDER, f"{uid}_sub.ass")
@@ -318,12 +333,13 @@ def start_mux():
     
     cmd.extend(font_arg)
     
+    # DEFAULT SUBTITLE FIX + MAPPING
     cmd.extend([
         '-map', '0:V',
         '-map', '0:a',
         '-map', '1',          
         '-c', 'copy',         
-        '-disposition:s:0', 'default',
+        '-disposition:s:0', 'default', # Forces the first subtitle stream (ours) to be Default
         output_path
     ])
 

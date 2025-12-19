@@ -11,7 +11,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_name_change_2025"
+app.secret_key = "final_no_delete_bug_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -32,11 +32,12 @@ def clean_old_files():
     while True:
         try:
             now = time.time()
-            retention_period = 1800 # 30 Mins
+            retention_period = 1800 # 30 Mins (Adhe ghante baad safai)
             for folder in [BASE_DOWNLOAD, BASE_UPLOAD]:
                 for f in os.listdir(folder):
                     f_path = os.path.join(folder, f)
                     if os.path.isfile(f_path):
+                        # Agar file 30 min purani hai toh udao
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
@@ -232,22 +233,14 @@ def index():
     user_font_dir = get_user_font_dir()
     fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
     
-    # --- AUTO-REMOVE ZOMBIE/DEAD TASKS ON REFRESH ---
+    # --- BUG FIX: Removed Auto-Delete logic from here ---
+    # Sirf list banayenge, delete nahi karenge
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
     
     for f in all_files:
         if f.endswith('.log'): continue
         if f.startswith(uid):
-            if f.startswith("RUNNING_"):
-                if f not in TASKS:
-                    try:
-                        os.remove(os.path.join(BASE_DOWNLOAD, f))
-                        log_p = os.path.join(BASE_DOWNLOAD, f + ".log")
-                        if os.path.exists(log_p): os.remove(log_p)
-                        continue 
-                    except: pass
-            
             clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
             user_files.append({'real_name': f, 'display_name': clean_name})
             
@@ -301,10 +294,12 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
+    # Cleanup Old (Sirf purani files, abhi wali nahi)
     for f in os.listdir(BASE_DOWNLOAD):
-        if f.startswith(uid):
-            try: os.remove(os.path.join(BASE_DOWNLOAD, f))
-            except: pass
+        if f.startswith(uid) and not f.startswith("RUNNING_"):
+             # Only delete COMPLETED files from list to keep list clean, 
+             # but let's keep it simple: Don't delete anything on new task to avoid confusion
+             pass
 
     m3u8_link = request.form.get('video_url')
     raw_filename = request.form.get('filename').strip()
@@ -335,7 +330,7 @@ def mux_video():
     try: open(temp_path, 'w').close()
     except: pass
 
-    # BYPASS USER AGENT
+    # BYPASS USER AGENT & REFERER
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     
     cmd = (

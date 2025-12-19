@@ -3,10 +3,11 @@ import subprocess
 import time
 import shutil
 import uuid
+import re
 from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = "map_fix_2025"
+app.secret_key = "vibe_coder_edition_2025"
 
 # --- FOLDERS ---
 BASE_DIR = os.getcwd()
@@ -27,24 +28,50 @@ def get_uid():
         session['uid'] = str(uuid.uuid4())[:8]
     return session['uid']
 
-# --- UI (Same Premium Look) ---
+# --- PROGRESS CALCULATION HELPER ---
+def calculate_progress(log_content):
+    try:
+        # Find Duration (Total Time)
+        duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", log_content)
+        # Find Current Time
+        time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", log_content)
+        
+        if duration_match and time_matches:
+            total_str = duration_match.group(1)
+            current_str = time_matches[-1]
+            
+            def to_sec(t):
+                h, m, s = t.split(':')
+                return int(h) * 3600 + int(m) * 60 + float(s)
+            
+            total_sec = to_sec(total_str)
+            current_sec = to_sec(current_str)
+            
+            if total_sec > 0:
+                percent = int((current_sec / total_sec) * 100)
+                return min(percent, 100) # Max 100
+    except:
+        pass
+    return 0 # Default if fail
+
+# --- UI CODE ---
 HTML_CODE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AD Web Muxer</title>
+    <title>AD Web Muxer !!</title>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root { --primary: #7000ff; --accent: #00ccff; --bg: #0a0a0c; --card: #16161a; --text: #e0e0e0; }
         body { background-color: var(--bg); color: var(--text); font-family: 'Poppins', sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        .container { background: rgba(22, 22, 26, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        .container { background: rgba(22, 22, 26, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
         h1 { font-weight: 600; text-align: center; margin-bottom: 25px; background: linear-gradient(90deg, var(--accent), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2rem; }
         .input-group { margin-bottom: 15px; text-align: left; }
         label { font-size: 0.85rem; color: #888; margin-bottom: 5px; display: block; }
-        input[type="text"] { width: 100%; padding: 12px; background: #0f0f12; border: 1px solid #333; border-radius: 8px; color: white; font-family: inherit; box-sizing: border-box; transition: 0.3s; }
-        input[type="text"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 10px rgba(0, 204, 255, 0.2); }
+        input[type="text"], select { width: 100%; padding: 12px; background: #0f0f12; border: 1px solid #333; border-radius: 8px; color: white; font-family: inherit; box-sizing: border-box; transition: 0.3s; }
+        input[type="text"]:focus, select:focus { border-color: var(--accent); outline: none; }
         .file-upload { position: relative; display: flex; align-items: center; justify-content: space-between; background: #0f0f12; border: 1px dashed #444; padding: 10px; border-radius: 8px; cursor: pointer; transition: 0.3s; }
         .file-upload:hover { border-color: var(--primary); }
         .file-upload input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
@@ -60,15 +87,20 @@ HTML_CODE = """
         .file-name { font-weight: 600; font-size: 0.95rem; color: #fff; word-break: break-all; }
         .status { padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
         .status.done { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
-        .status.processing { background: rgba(255, 187, 0, 0.15); color: #ffbb00; animation: pulse 1.5s infinite; }
+        .status.processing { background: rgba(255, 187, 0, 0.15); color: #ffbb00; }
         .status.error { background: rgba(255, 50, 50, 0.15); color: #ff3232; }
-        .log-box { font-family: monospace; font-size: 0.75rem; color: #ff6b6b; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
+        
+        /* PROGRESS BAR STYLES */
+        .progress-track { width: 100%; height: 8px; background: #222; border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--primary)); width: 0%; transition: width 0.5s ease; border-radius: 4px; box-shadow: 0 0 10px var(--accent); }
+        .progress-text { font-size: 0.75rem; color: #aaa; text-align: right; margin-top: 2px; }
+
+        .log-box { font-family: monospace; font-size: 0.7rem; color: #aaa; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; max-height: 100px; overflow-y: auto; }
         .actions { display: flex; gap: 10px; margin-top: 5px; }
         .btn-dl { flex: 1; text-align: center; background: rgba(0, 204, 255, 0.1); color: var(--accent); padding: 8px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600; transition: 0.2s; }
         .btn-dl:hover { background: var(--accent); color: #000; }
         .btn-del { width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; color: #666; border: 1px solid #333; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: 0.2s; }
         .btn-del:hover { border-color: #ff3232; color: #ff3232; }
-        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
     </style>
     <script>
         function updateFileName(input, id) {
@@ -79,13 +111,14 @@ HTML_CODE = """
 </head>
 <body>
     <div class="container">
-        <h1>AD Web Muxer</h1>
+        <h1>AD Web Muxer !!</h1>
         
         <form action="/start" method="POST" enctype="multipart/form-data">
             <div class="input-group">
                 <label>Video URL (M3U8)</label>
                 <input type="text" name="url" placeholder="Paste link..." required>
             </div>
+            
             <div class="input-group">
                 <label>Subtitle (.ASS)</label>
                 <div class="file-upload">
@@ -94,26 +127,38 @@ HTML_CODE = """
                     <input type="file" name="sub" accept=".ass" required onchange="updateFileName(this, 'sub-name')">
                 </div>
             </div>
+
             <div class="input-group">
-                <label>Custom Font (Optional)</label>
+                <label>Font (Saved or New)</label>
+                {% if saved_fonts %}
+                <select name="saved_font" style="margin-bottom: 8px;">
+                    <option value="">-- Select Saved Font --</option>
+                    {% for font in saved_fonts %}
+                        <option value="{{ font }}">{{ font }}</option>
+                    {% endfor %}
+                </select>
+                <div style="text-align:center; font-size:0.8rem; color:#666; margin-bottom:8px;">OR</div>
+                {% endif %}
                 <div class="file-upload">
-                    <span class="file-text" id="font-name">Choose .TTF/.OTF</span>
+                    <span class="file-text" id="font-name">Upload New .TTF/.OTF</span>
                     <span class="file-icon">🔤</span>
                     <input type="file" name="font" accept=".ttf,.otf" onchange="updateFileName(this, 'font-name')">
                 </div>
             </div>
+
             <div class="input-group">
                 <label>Output Filename</label>
                 <input type="text" name="fname" placeholder="Episode 01" required>
             </div>
+
             <button type="submit" class="btn-submit">⚡ Start Processing</button>
         </form>
 
         <div class="divider"></div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <span style="color:#888; font-size:0.9rem;">Recent Files</span>
-            <button onclick="location.reload()" class="refresh-btn">🔄 Refresh</button>
+            <span style="color:#888; font-size:0.9rem;">Files</span>
+            <button onclick="location.reload()" class="refresh-btn">🔄 Refresh Status</button>
         </div>
         
         <div>
@@ -130,7 +175,14 @@ HTML_CODE = """
                         {% endif %}
                     </div>
                     
-                    {% if file.status == 'error' %}
+                    {% if file.status == 'processing' %}
+                        <div class="progress-track">
+                            <div class="progress-fill" style="width: {{ file.percent }}%;"></div>
+                        </div>
+                        <div class="progress-text">{{ file.percent }}% Processed</div>
+                    {% endif %}
+                    
+                    {% if file.status == 'error' or file.status == 'processing' %}
                         <div class="log-box">{{ file.log }}</div>
                     {% endif %}
 
@@ -161,24 +213,40 @@ def home():
     uid = get_uid()
     files_data = []
     
+    # Saved Fonts Logic
+    saved_fonts_list = []
+    if os.path.exists(FONT_FOLDER):
+        raw_fonts = sorted([f for f in os.listdir(FONT_FOLDER) if f.startswith(uid)])
+        saved_fonts_list = [f.replace(f"{uid}_", "") for f in raw_fonts]
+
+    # File List Logic
     if os.path.exists(DOWNLOAD_FOLDER):
         for f in sorted(os.listdir(DOWNLOAD_FOLDER)):
             if f.startswith(uid) and f.endswith(".mkv"):
                 status = "done"
                 log_file = os.path.join(DOWNLOAD_FOLDER, f + ".log")
-                err_msg = ""
+                log_tail = "Initializing..."
+                percent = 0
 
                 if os.path.exists(log_file):
                     try:
                         with open(log_file, 'r', encoding='utf-8', errors='ignore') as lf:
-                            log_content = lf.read()
-                            if "Error" in log_content or "Invalid data" in log_content or "403 Forbidden" in log_content or "Server returned 40" in log_content:
+                            content = lf.read()
+                            
+                            # Calculate Percentage
+                            percent = calculate_progress(content)
+                            
+                            # Determine Status
+                            if "Error" in content or "Invalid data" in content or "403 Forbidden" in content:
                                 status = "error"
-                                err_msg = log_content[-300:] 
-                            elif "muxing overhead" in log_content or "LSIZE" in log_content: 
+                                log_tail = content[-300:] # Show last 300 chars of error
+                            elif "muxing overhead" in content or "LSIZE" in content: 
                                 status = "done"
+                                percent = 100
                             else:
                                 status = "processing"
+                                # Show last bit of log to see movement
+                                log_tail = content[-150:] if content else "Starting..."
                     except: status = "processing"
                 
                 display_name = f.replace(f"{uid}_", "").replace(".mkv", "")
@@ -187,10 +255,11 @@ def home():
                     "name": display_name,
                     "realname": f,
                     "status": status,
-                    "log": err_msg
+                    "log": log_tail,
+                    "percent": percent
                 })
 
-    return render_template_string(HTML_CODE, files=files_data)
+    return render_template_string(HTML_CODE, files=files_data, saved_fonts=saved_fonts_list)
 
 @app.route('/start', methods=['POST'])
 def start_mux():
@@ -203,12 +272,20 @@ def start_mux():
     sub_path = os.path.join(UPLOAD_FOLDER, f"{uid}_sub.ass")
     sub_file.save(sub_path)
     
-    font_file = request.files.get('font')
+    # Font Logic
     font_arg = []
+    final_font_path = None
+    font_file = request.files.get('font')
+    saved_font_name = request.form.get('saved_font')
+
     if font_file and font_file.filename:
-        font_path = os.path.join(FONT_FOLDER, f"{uid}_{font_file.filename}")
-        font_file.save(font_path)
-        font_arg = ['-attach', font_path, '-metadata:s:t', 'mimetype=application/x-truetype-font']
+        final_font_path = os.path.join(FONT_FOLDER, f"{uid}_{font_file.filename}")
+        font_file.save(final_font_path)
+    elif saved_font_name:
+        final_font_path = os.path.join(FONT_FOLDER, f"{uid}_{saved_font_name}")
+    
+    if final_font_path and os.path.exists(final_font_path):
+        font_arg = ['-attach', final_font_path, '-metadata:s:t', 'mimetype=application/x-truetype-font']
 
     output_filename = f"{uid}_{fname}.mkv"
     output_path = os.path.join(DOWNLOAD_FOLDER, output_filename)
@@ -216,7 +293,6 @@ def start_mux():
 
     open(output_path, 'w').close()
 
-    # --- UPDATED COMMAND WITH STRICT MAPPING ---
     cmd = [
         'ffmpeg', '-y',
         '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -232,13 +308,13 @@ def start_mux():
     
     cmd.extend(font_arg)
     
-    # --- HERE IS THE FIX: Explicitly select ONLY Video:0 and Audio:0 ---
+    # Map Fix + Copy
     cmd.extend([
-        '-map', '0:v:0',      # Select ONLY first video stream
-        '-map', '0:a:0',      # Select ONLY first audio stream
-        '-map', '1',          # Select Subtitle file (input 1)
-        '-c', 'copy',         # Copy without re-encoding
-        '-disposition:s:0', 'default', # Make subtitle default
+        '-map', '0:V',
+        '-map', '0:a',
+        '-map', '1',          
+        '-c', 'copy',         
+        '-disposition:s:0', 'default',
         output_path
     ])
 

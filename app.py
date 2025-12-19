@@ -13,13 +13,13 @@ app.secret_key = "final_pro_max_muxer_2025"
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
 BASE_DOWNLOAD = 'downloads'
-BASE_FONT = 'User_Fonts' # Global Font Storage
+BASE_FONT = 'User_Fonts' 
 STATUS_FILE = 'status.json'
 
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- CACHE CONTROL (No Glitch) ---
+# --- CACHE CONTROL ---
 @app.after_request
 def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -62,11 +62,10 @@ INDEX_HTML = """
         
         button { width: 100%; padding: 14px; margin-top: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; }
         
-        /* COLORS */
         .btn-green { background: #238636; color: white; transition: 0.3s; }
         .btn-blue { background: #1f6feb; color: white; transition: 0.3s; font-size: 14px; padding: 6px 12px; } 
         
-        /* FONT MANAGER STYLES */
+        /* FONT MANAGER */
         .btn-grey { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; font-size: 14px; padding: 8px 15px; transition: 0.2s; }
         .font-list { text-align: left; margin-top: 15px; max-height: 150px; overflow-y: auto; }
         .font-item { display: flex; justify-content: space-between; align-items: center; background: #21262d; padding: 8px 12px; border-radius: 6px; margin-bottom: 5px; border: 1px solid #30363d; }
@@ -269,7 +268,6 @@ BIRTHDAY_HTML = """
 @app.route('/')
 def index():
     uid = get_user_id()
-    # List Fonts from Global Folder
     fonts = sorted([f for f in os.listdir(BASE_FONT) if f.endswith(('.ttf', '.otf'))])
     
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
@@ -287,7 +285,6 @@ def index():
 def upload_font():
     file = request.files.get('font_file')
     if file and file.filename:
-        # Save to Global Folder
         file.save(os.path.join(BASE_FONT, file.filename))
     return redirect(url_for('index'))
 
@@ -326,7 +323,6 @@ def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
     
-    # Cleanup Old Mux Files
     for f in os.listdir(BASE_DOWNLOAD):
         if f.startswith(uid):
             try: os.remove(os.path.join(BASE_DOWNLOAD, f))
@@ -351,7 +347,6 @@ def mux_video():
     
     font_cmd = ""
     if selected_font and selected_font != "NONE":
-        # Get from Global Folder
         f_path = os.path.join(BASE_FONT, selected_font)
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'

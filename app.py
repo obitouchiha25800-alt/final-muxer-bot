@@ -8,15 +8,15 @@ import uuid
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_fixed_syntax_2025"
+app.secret_key = "final_private_fonts_2025"
 
 # --- CONFIGURATION ---
 BASE_UPLOAD = 'uploads'
 BASE_DOWNLOAD = 'downloads'
-BASE_FONT = 'User_Fonts' 
+BASE_FONT_ROOT = 'User_Fonts' # Root folder for all users
 STATUS_FILE = 'status.json'
 
-for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT]:
+for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
 # --- CACHE CONTROL ---
@@ -32,6 +32,14 @@ def get_user_id():
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())[:8]
     return session['user_id']
+
+def get_user_font_dir():
+    """Creates and returns a private font path for the current user"""
+    uid = get_user_id()
+    user_dir = os.path.join(BASE_FONT_ROOT, uid)
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+    return user_dir
 
 def get_service_status():
     if not os.path.exists(STATUS_FILE):
@@ -64,9 +72,8 @@ INDEX_HTML = """
         
         .btn-green { background: #238636; color: white; transition: 0.3s; }
         .btn-blue { background: #1f6feb; color: white; transition: 0.3s; font-size: 14px; padding: 6px 12px; } 
-        
-        /* FONT MANAGER */
         .btn-grey { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; font-size: 14px; padding: 8px 15px; transition: 0.2s; }
+        
         .font-list { text-align: left; margin-top: 15px; max-height: 150px; overflow-y: auto; }
         .font-item { display: flex; justify-content: space-between; align-items: center; background: #21262d; padding: 8px 12px; border-radius: 6px; margin-bottom: 5px; border: 1px solid #30363d; }
         .font-name { font-size: 0.9rem; color: #e6edf3; }
@@ -83,6 +90,8 @@ INDEX_HTML = """
         .progress-container { background: #333; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 8px; }
         .progress-bar { height: 100%; background: #238636; width: 0%; transition: width 0.3s; }
         .status-text { font-size: 0.85rem; color: #e3b341; margin-bottom: 5px;}
+        
+        .error-msg { color: #ff7b72; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #ff7b72; display: none; }
     </style>
     <script>
         let intervalId;
@@ -117,7 +126,7 @@ INDEX_HTML = """
     <div class="box">
         <form action="/mux" method="POST" enctype="multipart/form-data" onsubmit="document.querySelector('.btn-green').innerText='⏳ Starting...'; document.querySelector('.btn-green').style.opacity='0.7';">
             <input type="text" name="video_url" placeholder="Paste M3U8 Link" required>
-            <input type="file" name="subtitle" required>
+            <input type="file" name="subtitle" accept=".ass" required>
             <select name="font">
                 <option value="NONE">Default Font</option>
                 {% for font in fonts %}
@@ -130,7 +139,7 @@ INDEX_HTML = """
         
         <hr style="border-color: #30363d; margin: 15px 0;">
         
-        <h3 style="margin: 0 0 10px 0; font-size: 1rem; color: #8b949e;">Manage Fonts</h3>
+        <h3 style="margin: 0 0 10px 0; font-size: 1rem; color: #8b949e;">My Private Fonts</h3>
         <form action="/upload_font" method="POST" enctype="multipart/form-data" style="display:flex; gap:10px; align-items:center;">
             <input type="file" name="font_file" accept=".ttf,.otf" style="flex:1; margin:0;" required>
             <button type="submit" class="btn-grey" style="width:auto; margin:0;">Upload</button>
@@ -147,6 +156,12 @@ INDEX_HTML = """
             {% endfor %}
         </div>
     </div>
+
+    {% if error %}
+    <div class="box error-msg" style="display:block;">
+        ⚠️ {{ error }}
+    </div>
+    {% endif %}
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <h3 style="margin:0;">📂 Files</h3>
@@ -178,7 +193,7 @@ INDEX_HTML = """
 </html>
 """
 
-# --- BIRTHDAY HTML (GLASSMORPHISM STYLE) ---
+# --- BIRTHDAY HTML ---
 BIRTHDAY_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -268,7 +283,12 @@ BIRTHDAY_HTML = """
 @app.route('/')
 def index():
     uid = get_user_id()
-    fonts = sorted([f for f in os.listdir(BASE_FONT) if f.endswith(('.ttf', '.otf'))])
+    error = request.args.get('error')
+    
+    # --- PRIVATE FONT LOADING ---
+    # Sirf us folder se fonts load honge jo current user ID ka hai
+    user_font_dir = get_user_font_dir()
+    fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
     
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
@@ -279,18 +299,22 @@ def index():
             clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
             user_files.append({'real_name': f, 'display_name': clean_name})
             
-    return render_template_string(INDEX_HTML, files=user_files, fonts=fonts, is_active=get_service_status())
+    return render_template_string(INDEX_HTML, files=user_files, fonts=fonts, is_active=get_service_status(), error=error)
 
 @app.route('/upload_font', methods=['POST'])
 def upload_font():
     file = request.files.get('font_file')
     if file and file.filename:
-        file.save(os.path.join(BASE_FONT, file.filename))
+        # Save to PRIVATE user folder
+        user_font_dir = get_user_font_dir()
+        file.save(os.path.join(user_font_dir, file.filename))
     return redirect(url_for('index'))
 
 @app.route('/delete_font/<filename>')
 def delete_font(filename):
-    path = os.path.join(BASE_FONT, filename)
+    # Delete from PRIVATE user folder
+    user_font_dir = get_user_font_dir()
+    path = os.path.join(user_font_dir, filename)
     if os.path.exists(path):
         os.remove(path)
     return redirect(url_for('index'))
@@ -332,11 +356,16 @@ def mux_video():
     raw_filename = request.form.get('filename').replace(" ", "_")
     selected_font = request.form.get('font')
     
+    sub_file = request.files.get('subtitle')
+    if not sub_file: return redirect(url_for('index', error="Subtitle Missing!"))
+
+    # CHECK: ONLY .ASS ALLOWED
+    if not sub_file.filename.lower().endswith('.ass'):
+        return redirect(url_for('index', error="❌ Error: Sirf .ASS subtitle allowed hai! (.srt/.vtt allowed nahi)"))
+
     final_name = f"{uid}_{raw_filename}"
     if not final_name.endswith('.mkv'): final_name += ".mkv"
     
-    sub_file = request.files.get('subtitle')
-    if not sub_file: return "Subtitle Required!"
     sub_path = os.path.join(BASE_UPLOAD, f"sub_{uid}_{int(time.time())}.ass")
     sub_file.save(sub_path)
 
@@ -347,18 +376,21 @@ def mux_video():
     
     font_cmd = ""
     if selected_font and selected_font != "NONE":
-        f_path = os.path.join(BASE_FONT, selected_font)
+        # Look in PRIVATE user folder
+        user_font_dir = get_user_font_dir()
+        f_path = os.path.join(user_font_dir, selected_font)
         if os.path.exists(f_path):
             font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
 
-    # Fixed syntax here (split into multiple lines)
     try: 
         with open(temp_path, 'w') as f: 
             pass
     except: 
         pass
 
-    cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -c copy "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
+    # FORCE DEFAULT SUBTITLE
+    cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -map 0 -map 1 -c copy -disposition:s:0 default "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
+    
     subprocess.Popen(cmd, shell=True)
     time.sleep(1)
     return redirect(url_for('index'))

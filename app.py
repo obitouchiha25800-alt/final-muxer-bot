@@ -7,7 +7,7 @@ import re
 from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = "final_vibe_fix_2025"
+app.secret_key = "final_clean_download_2025"
 
 # --- FOLDERS ---
 BASE_DIR = os.getcwd()
@@ -66,12 +66,10 @@ HTML_CODE = """
         * { box-sizing: border-box; }
         body { background-color: var(--bg); color: var(--text); font-family: 'Poppins', sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
         
-        /* Glassmorphism Container */
         .container { background: rgba(22, 22, 26, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
         
         h1 { font-weight: 600; text-align: center; margin-bottom: 25px; background: linear-gradient(90deg, var(--accent), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2rem; }
         
-        /* Mobile Responsive Fixes */
         @media (max-width: 600px) {
             body { padding: 10px; }
             .container { padding: 20px 15px; border-radius: 16px; }
@@ -127,6 +125,8 @@ HTML_CODE = """
             document.getElementById(id).innerText = name;
         }
         function copyLink(filename) {
+            // Remove UID for clean copy link too if possible, but real link needs UID to find file. 
+            // We will copy the real download link but the downloaded file will be clean.
             const link = window.location.origin + "/download/" + filename;
             navigator.clipboard.writeText(link).then(() => {
                 alert("✅ Link Copied!\\n" + link);
@@ -271,7 +271,6 @@ def home():
                                 log_tail = content[-150:] if content else "Starting..."
                     except: status = "processing"
                 
-                # CLEAN DISPLAY NAME (Removing UID and Extension)
                 display_name = f.replace(f"{uid}_", "").replace(".mkv", "")
                 
                 files_data.append({
@@ -289,10 +288,7 @@ def start_mux():
     uid = get_uid()
     
     url = request.form.get('url')
-    # CLEAN FILENAME LOGIC: Strip spaces but DO NOT replace them with underscores for internal logic if user wants clean UI.
-    # However, for file system safety, it's safer to keep underscores internally, but we showed clean name in UI above.
-    # User asked to remove underscores. I will allow spaces in filename now.
-    fname = request.form.get('fname').strip() 
+    fname = request.form.get('fname').strip()
     
     sub_file = request.files.get('sub')
     sub_path = os.path.join(UPLOAD_FOLDER, f"{uid}_sub.ass")
@@ -333,13 +329,12 @@ def start_mux():
     
     cmd.extend(font_arg)
     
-    # DEFAULT SUBTITLE FIX + MAPPING
     cmd.extend([
         '-map', '0:V',
         '-map', '0:a',
         '-map', '1',          
         '-c', 'copy',         
-        '-disposition:s:0', 'default', # Forces the first subtitle stream (ours) to be Default
+        '-disposition:s:0', 'default', 
         output_path
     ])
 
@@ -349,9 +344,15 @@ def start_mux():
     time.sleep(1)
     return redirect(url_for('home'))
 
+# --- FIXED DOWNLOAD ROUTE (Removes UUID from download name) ---
 @app.route('/download/<filename>')
 def download(filename):
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True)
+    clean_name = filename
+    # Remove UID if present (Simple check for underscore)
+    if '_' in filename:
+        clean_name = filename.split('_', 1)[1]
+        
+    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True, download_name=clean_name)
 
 @app.route('/delete/<filename>')
 def delete(filename):

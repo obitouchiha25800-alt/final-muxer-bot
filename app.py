@@ -6,12 +6,11 @@ import shutil
 import json
 import uuid
 import threading
-import signal
 from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_ultimate_nodelete_2025"
+app.secret_key = "back_to_basics_stable_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -21,14 +20,12 @@ BASE_DOWNLOAD = 'downloads'
 BASE_FONT_ROOT = 'User_Fonts' 
 STATUS_FILE = 'status.json'
 
-# Global Dictionary for Active Tasks
-TASKS = {}
-
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- AUTO-CLEANER (Background Only - 30 Mins) ---
-# Ye sirf tabhi delete karega jab file 30 minute purani ho jaye.
+# --- SIMPLE AUTO-CLEANER (No RAM dependency) ---
+# Ye sirf tabhi delete karega jab file 30 minute se zyada purani ho.
+# Ye kabhi bhi "Active" file ko nahi chedega.
 def clean_old_files():
     while True:
         try:
@@ -38,16 +35,12 @@ def clean_old_files():
                 for f in os.listdir(folder):
                     f_path = os.path.join(folder, f)
                     if os.path.isfile(f_path):
+                        # Agar file 30 min purani hai toh udao
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
-            
-            # Memory cleanup
-            keys_to_remove = [k for k, p in TASKS.items() if p.poll() is not None]
-            for k in keys_to_remove:
-                del TASKS[k]
         except: pass
-        time.sleep(600)
+        time.sleep(600) # Check every 10 mins
 
 threading.Thread(target=clean_old_files, daemon=True).start()
 
@@ -126,7 +119,7 @@ INDEX_HTML = """
                 fetch('/progress/' + filename + '?t=' + new Date().getTime())
                 .then(r => r.json())
                 .then(d => {
-                    if (d.status.includes("Error") || d.status.includes("Failed")) {
+                    if (d.status.includes("Error") || d.status.includes("Failed") || d.status.includes("403")) {
                         div.querySelector('.status-text').innerText = d.status;
                         div.querySelector('.status-text').style.color = "#ff7b72";
                         div.querySelector('.progress-bar').style.backgroundColor = "#ff7b72";
@@ -203,9 +196,6 @@ INDEX_HTML = """
                     <div style="margin-top:10px;">
                         <div class="status-text">⏳ Initializing...</div>
                         <div class="progress-container"><div class="progress-bar"></div></div>
-                        <div style="margin-top: 10px; text-align: right;">
-                            <a href="/cancel/{{ file.real_name }}" class="btn-red">❌ Cancel Task</a>
-                        </div>
                     </div>
                 {% else %}
                     <div class="actions">
@@ -233,7 +223,7 @@ def index():
     user_font_dir = get_user_font_dir()
     fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
     
-    # --- LIST FILES (No Auto-Delete Here) ---
+    # --- SAFE LISTING (No Deletion Logic) ---
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
     
@@ -271,8 +261,12 @@ def get_progress(filename):
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        if "Error" in content or "Invalid data" in content or "Server returned 40" in content or "Forbidden" in content:
-             return jsonify({"percent": 0, "status": "❌ Error! Check URL/Format"})
+        # Check for Protected Link Error
+        if "403 Forbidden" in content or "Server returned 403" in content:
+             return jsonify({"percent": 0, "status": "❌ Error 403: Link Protected"})
+             
+        if "Error" in content or "Invalid data" in content:
+             return jsonify({"percent": 0, "status": "❌ Error! Check Log"})
         
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", content)
@@ -292,9 +286,6 @@ def get_progress(filename):
 def mux_video():
     if not get_service_status(): return "⛔ Service is OFF"
     uid = get_user_id()
-    
-    # DO NOT DELETE OLD FILES HERE AUTOMATICALLY
-    # Let the background cleaner handle it or user delete it.
     
     m3u8_link = request.form.get('video_url')
     raw_filename = request.form.get('filename').strip()
@@ -325,9 +316,10 @@ def mux_video():
     try: open(temp_path, 'w').close()
     except: pass
 
-    # BYPASS USER AGENT & REFERER
+    # BYPASS USER AGENT & REFERER (Kept this fix)
     user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     
+    # Removed TASKS tracking. Just fire and forget.
     cmd = (
         f'ffmpeg -y -user_agent "{user_agent}" -headers "Referer: {m3u8_link}" -tls_verify 0 '
         f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 '
@@ -336,28 +328,8 @@ def mux_video():
         f'"{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     )
     
-    proc = subprocess.Popen(cmd, shell=True)
-    TASKS[temp_name] = proc
-
+    subprocess.Popen(cmd, shell=True)
     time.sleep(1)
-    return redirect(url_for('index'))
-
-@app.route('/cancel/<filename>')
-def cancel_task(filename):
-    if filename.startswith(get_user_id()):
-        if filename in TASKS:
-            try:
-                TASKS[filename].kill()
-                del TASKS[filename]
-            except: pass
-        
-        try:
-            path = os.path.join(BASE_DOWNLOAD, filename)
-            if os.path.exists(path): os.remove(path)
-            log_path = path + ".log"
-            if os.path.exists(log_path): os.remove(log_path)
-        except: pass
-        
     return redirect(url_for('index'))
 
 @app.route('/downloads/<filename>')

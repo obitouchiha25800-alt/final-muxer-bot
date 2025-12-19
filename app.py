@@ -11,7 +11,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_cancel_btn_2025"
+app.secret_key = "final_name_change_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -21,14 +21,13 @@ BASE_DOWNLOAD = 'downloads'
 BASE_FONT_ROOT = 'User_Fonts' 
 STATUS_FILE = 'status.json'
 
-# Global Dictionary to store active processes
-# Format: { 'RUNNING_filename': subprocess_object }
+# Global Dictionary for Active Tasks
 TASKS = {}
 
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- AUTO-CLEANER ---
+# --- AUTO-CLEANER (Background) ---
 def clean_old_files():
     while True:
         try:
@@ -42,12 +41,10 @@ def clean_old_files():
                             try: os.remove(f_path)
                             except: pass
             
-            # Clean TASKS dict for finished processes (Memory Saver)
+            # Clean dead tasks from memory
             keys_to_remove = [k for k, p in TASKS.items() if p.poll() is not None]
             for k in keys_to_remove:
                 del TASKS[k]
-                
-            print(f"🧹 [Auto-Cleaner] Checked at {datetime.now().strftime('%H:%M:%S')}")
         except: pass
         time.sleep(600)
 
@@ -89,7 +86,7 @@ INDEX_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AD Web Muxer</title>
+    <title>AD Web Muxer!!</title>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 15px; margin: 0; text-align: center; }
         h1 { font-size: 1.5rem; margin-bottom: 20px; color: #58a6ff; }
@@ -153,7 +150,7 @@ INDEX_HTML = """
     </script>
 </head>
 <body>
-    <h1>🚀 AD Web Muxer</h1>
+    <h1>🚀 AD Web Muxer!!</h1>
     
     <div class="box">
         <form action="/mux" method="POST" enctype="multipart/form-data" onsubmit="document.querySelector('.btn-green').innerText='⏳ Starting...'; document.querySelector('.btn-green').style.opacity='0.7';">
@@ -222,7 +219,7 @@ INDEX_HTML = """
         {% endfor %}
     </div>
     
-    <div class="cleaner-badge">🧹 Auto-Cleaner Active (Deletes > 30 mins)</div>
+    <div class="cleaner-badge">🧹 Auto-Cleaner Active</div>
 </body>
 </html>
 """
@@ -234,13 +231,26 @@ def index():
     error = request.args.get('error')
     user_font_dir = get_user_font_dir()
     fonts = sorted([f for f in os.listdir(user_font_dir) if f.endswith(('.ttf', '.otf'))])
+    
+    # --- AUTO-REMOVE ZOMBIE/DEAD TASKS ON REFRESH ---
     all_files = sorted(os.listdir(BASE_DOWNLOAD))
     user_files = []
+    
     for f in all_files:
         if f.endswith('.log'): continue
-        if f.startswith(uid) or (f.startswith("RUNNING_") and uid in f):
+        if f.startswith(uid):
+            if f.startswith("RUNNING_"):
+                if f not in TASKS:
+                    try:
+                        os.remove(os.path.join(BASE_DOWNLOAD, f))
+                        log_p = os.path.join(BASE_DOWNLOAD, f + ".log")
+                        if os.path.exists(log_p): os.remove(log_p)
+                        continue 
+                    except: pass
+            
             clean_name = f.replace(f"{uid}_", "").replace("RUNNING_", "")
             user_files.append({'real_name': f, 'display_name': clean_name})
+            
     return render_template_string(INDEX_HTML, files=user_files, fonts=fonts, is_active=get_service_status(), error=error)
 
 @app.route('/upload_font', methods=['POST'])
@@ -259,15 +269,17 @@ def delete_font(filename):
 @app.route('/progress/<filename>')
 def get_progress(filename):
     clean_name = filename.replace("RUNNING_", "")
+    log_file = os.path.join(BASE_DOWNLOAD, filename + ".log")
+    
     if os.path.exists(os.path.join(BASE_DOWNLOAD, clean_name)):
         return jsonify({"percent": 100, "status": "✅ Done"})
-    log_file = os.path.join(BASE_DOWNLOAD, filename + ".log")
+    
     if not os.path.exists(log_file): return jsonify({"percent": 0, "status": "Starting..."})
     
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        if "Error" in content or "Invalid data" in content or "Server returned 40" in content:
+        if "Error" in content or "Invalid data" in content or "Server returned 40" in content or "Forbidden" in content:
              return jsonify({"percent": 0, "status": "❌ Error! Check URL/Format"})
         
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
@@ -323,27 +335,32 @@ def mux_video():
     try: open(temp_path, 'w').close()
     except: pass
 
-    # Start Process and Store it
-    cmd = f'ffmpeg -y -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -map 0 -map 1 -c copy -disposition:s:0 default "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
+    # BYPASS USER AGENT
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    
+    cmd = (
+        f'ffmpeg -y -user_agent "{user_agent}" -headers "Referer: {m3u8_link}" -tls_verify 0 '
+        f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 '
+        f'-i "{m3u8_link}" -i "{sub_path}"{font_cmd} '
+        f'-map 0 -map 1 -c copy -disposition:s:0 default '
+        f'"{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
+    )
     
     proc = subprocess.Popen(cmd, shell=True)
-    TASKS[temp_name] = proc # Save process to KILL later
+    TASKS[temp_name] = proc
 
     time.sleep(1)
     return redirect(url_for('index'))
 
-# --- NEW: CANCEL TASK ROUTE ---
 @app.route('/cancel/<filename>')
 def cancel_task(filename):
     if filename.startswith(get_user_id()):
-        # 1. Kill the process if running
         if filename in TASKS:
             try:
-                TASKS[filename].kill() # Stop FFmpeg
+                TASKS[filename].kill()
                 del TASKS[filename]
             except: pass
         
-        # 2. Delete the incomplete file and log
         try:
             path = os.path.join(BASE_DOWNLOAD, filename)
             if os.path.exists(path): os.remove(path)

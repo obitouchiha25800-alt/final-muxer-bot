@@ -5,15 +5,15 @@ import re
 import shutil
 import json
 import uuid
-from datetime import timedelta
+import threading
+from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_clean_muxer_2025"
+app.secret_key = "final_auto_cleaner_2025"
 
 # --- CONFIGURATION ---
-# Session 7 din tak active rahega
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7) # Login 7 din tak rahega
 
 BASE_UPLOAD = 'uploads'
 BASE_DOWNLOAD = 'downloads'
@@ -22,6 +22,43 @@ STATUS_FILE = 'status.json'
 
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
+
+# --- AUTO-CLEANER (BACKGROUND JHAADU WALA) 🧹 ---
+def clean_old_files():
+    while True:
+        try:
+            now = time.time()
+            # 30 Minutes (1800 seconds) se purani files delete karo
+            retention_period = 1800 
+            
+            # Check Downloads Folder
+            for f in os.listdir(BASE_DOWNLOAD):
+                f_path = os.path.join(BASE_DOWNLOAD, f)
+                if os.path.isfile(f_path):
+                    if now - os.path.getmtime(f_path) > retention_period:
+                        try: os.remove(f_path)
+                        except: pass
+            
+            # Check Uploads (Subtitles)
+            for f in os.listdir(BASE_UPLOAD):
+                f_path = os.path.join(BASE_UPLOAD, f)
+                if os.path.isfile(f_path):
+                    if now - os.path.getmtime(f_path) > retention_period:
+                        try: os.remove(f_path)
+                        except: pass
+                        
+            # Logs mein print karo (Server console pe dikhega)
+            print(f"🧹 [Auto-Cleaner] Safai ho gayi at {datetime.now().strftime('%H:%M:%S')}")
+            
+        except Exception as e:
+            print(f"⚠️ Cleaner Error: {e}")
+            
+        # Har 10 minute mein check karo
+        time.sleep(600)
+
+# Start Cleaner Thread
+threading.Thread(target=clean_old_files, daemon=True).start()
+
 
 # --- CACHE CONTROL ---
 @app.after_request
@@ -96,6 +133,9 @@ INDEX_HTML = """
         .status-text { font-size: 0.85rem; color: #e3b341; margin-bottom: 5px;}
         
         .error-msg { color: #ff7b72; background: rgba(255,0,0,0.1); padding: 10px; border-radius: 8px; margin-top: 10px; border: 1px solid #ff7b72; display: none; }
+        
+        /* Auto-cleaner badge */
+        .cleaner-badge { background: #21262d; color: #8b949e; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; margin-top: 20px; display: inline-block; border: 1px solid #30363d; }
     </style>
     <script>
         let intervalId;
@@ -193,6 +233,8 @@ INDEX_HTML = """
             <p style="color:#8b949e; margin-top: 20px;">No files yet.</p>
         {% endfor %}
     </div>
+    
+    <div class="cleaner-badge">🧹 Auto-Cleaner Active (Deletes > 30 mins)</div>
 </body>
 </html>
 """
@@ -300,7 +342,6 @@ def mux_video():
     except: 
         pass
 
-    # Command: Force Default Subtitle
     cmd = f'ffmpeg -y -i "{m3u8_link}" -i "{sub_path}"{font_cmd} -map 0 -map 1 -c copy -disposition:s:0 default "{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
     
     subprocess.Popen(cmd, shell=True)

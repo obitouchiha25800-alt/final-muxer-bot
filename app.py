@@ -10,7 +10,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_mux_engine_fix_2025"
+app.secret_key = "final_execution_fix_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -23,6 +23,9 @@ STATUS_FILE = 'status.json'
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
+# --- GLOBAL TASKS DICTIONARY ---
+TASKS = {}
+
 # --- AUTO-CLEANER (Safe Mode) ---
 def clean_old_files():
     while True:
@@ -33,10 +36,14 @@ def clean_old_files():
                 for f in os.listdir(folder):
                     f_path = os.path.join(folder, f)
                     if os.path.isfile(f_path):
-                        # Sirf bahut purani files udao, active nahi
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
+            
+            # Clean dead tasks from memory
+            keys_to_remove = [k for k, p in TASKS.items() if p.poll() is not None]
+            for k in keys_to_remove:
+                del TASKS[k]
         except: pass
         time.sleep(600)
 
@@ -121,14 +128,12 @@ INDEX_HTML = """
                         div.querySelector('.status-text').innerText = d.status;
                         div.querySelector('.status-text').style.color = "#ff7b72";
                         div.querySelector('.progress-bar').style.backgroundColor = "#ff7b72";
-                        // Stop updating this specific item
-                        div.classList.remove('processing');
                     } else {
                         div.querySelector('.progress-bar').style.width = d.percent + "%";
                         if(d.percent >= 100) {
                             div.querySelector('.status-text').innerText = "✅ Finalizing...";
                             div.querySelector('.status-text').style.color = "#39d353";
-                            setTimeout(() => location.reload(), 2000);
+                            setTimeout(() => location.reload(), 1500);
                         } else {
                             div.querySelector('.status-text').innerText = d.status;
                         }
@@ -197,7 +202,7 @@ INDEX_HTML = """
                         <div class="status-text">⏳ Initializing...</div>
                         <div class="progress-container"><div class="progress-bar"></div></div>
                         <div style="margin-top: 10px; text-align: right;">
-                             <a href="/cancel/{{ file.real_name }}" class="btn-red">❌ Force Stop</a>
+                            <a href="/cancel/{{ file.real_name }}" class="btn-red">❌ Force Stop</a>
                         </div>
                     </div>
                 {% else %}
@@ -263,10 +268,9 @@ def get_progress(filename):
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        # --- ENHANCED ERROR DETECTION ---
-        # Catch specific errors from logs to show user
+        # Check specific errors
         if "403 Forbidden" in content or "Server returned 403" in content:
-             return jsonify({"percent": 0, "status": "❌ Error 403: Link Rejected (Expired/Protected)"})
+             return jsonify({"percent": 0, "status": "❌ Error 403: Link Protected"})
         if "No such file" in content:
              return jsonify({"percent": 0, "status": "❌ Error: Link Broken"})
         if "Invalid data" in content:
@@ -311,37 +315,38 @@ def mux_video():
     final_path = os.path.join(BASE_DOWNLOAD, final_name)
     log_path = temp_path + ".log"
     
-    font_cmd = ""
+    font_cmd = []
     if selected_font and selected_font != "NONE":
         f_path = os.path.join(get_user_font_dir(), selected_font)
         if os.path.exists(f_path):
-            font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
+            font_cmd = ['-attach', f_path, '-metadata:s:t', 'mimetype=application/x-truetype-font']
 
-    # Create dummy file to show in UI immediately
+    # Create dummy file
     try: open(temp_path, 'w').close()
     except: pass
 
-    # --- ULTIMATE HEADERS ---
-    # Sab kuch fake kar diya taaki server block na kare
-    headers = 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n'
-    headers += f'Referer: {m3u8_link}\r\n'
-    headers += 'Accept: */*\r\n'
-    headers += 'Accept-Language: en-US,en;q=0.9\r\n'
+    # --- THE LIST BASED COMMAND (NO SHELL=TRUE) ---
+    cmd = [
+        'ffmpeg', '-y',
+        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '-headers', f'Referer: {m3u8_link}\r\n',
+        '-tls_verify', '0',
+        '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
+        '-i', m3u8_link,
+        '-i', sub_path
+    ]
     
-    # FFmpeg command that mimics a browser
-    cmd = (
-        f'ffmpeg -y '
-        f'-user_agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" '
-        f'-headers "{headers}" '
-        f'-protocol_whitelist file,http,https,tcp,tls,crypto '  # ALLOW ALL PROTOCOLS
-        f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 '
-        f'-i "{m3u8_link}" -i "{sub_path}"{font_cmd} '
-        f'-map 0 -map 1 -c copy -disposition:s:0 default '
-        f'"{temp_path}" 2> "{log_path}" && mv "{temp_path}" "{final_path}" && rm "{log_path}"'
-    )
+    # Add Font Command
+    if font_cmd:
+        cmd.extend(font_cmd)
+        
+    # Add Mapping and Copy (Must be at end)
+    cmd.extend(['-map', '0', '-map', '1', '-c', 'copy', '-disposition:s:0', 'default', temp_path])
     
-    # Run in background without tracking (Fire & Forget)
-    subprocess.Popen(cmd, shell=True)
+    # Run Process (Redirect Output to Log)
+    with open(log_path, "w") as log:
+        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+        TASKS[temp_name] = proc
 
     time.sleep(1)
     return redirect(url_for('index'))
@@ -349,15 +354,17 @@ def mux_video():
 @app.route('/cancel/<filename>')
 def cancel_task(filename):
     if filename.startswith(get_user_id()):
-        # Manual cleanup (Since we don't track process ID anymore for stability)
+        if filename in TASKS:
+            try:
+                TASKS[filename].kill()
+                del TASKS[filename]
+            except: pass
+        
         try:
             path = os.path.join(BASE_DOWNLOAD, filename)
             if os.path.exists(path): os.remove(path)
             log_path = path + ".log"
             if os.path.exists(log_path): os.remove(log_path)
-            
-            # Note: The background ffmpeg might still run for a bit until it errors out writing to missing file, 
-            # but it clears the UI immediately.
         except: pass
         
     return redirect(url_for('index'))

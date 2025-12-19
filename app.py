@@ -3,10 +3,10 @@ import subprocess
 import time
 import shutil
 import uuid
-from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, jsonify, session
+from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = "debug_mode_2025"
+app.secret_key = "map_fix_2025"
 
 # --- FOLDERS ---
 BASE_DIR = os.getcwd()
@@ -27,56 +27,130 @@ def get_uid():
         session['uid'] = str(uuid.uuid4())[:8]
     return session['uid']
 
-# --- HTML UI ---
+# --- UI (Same Premium Look) ---
 HTML_CODE = """
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>AD Web Muxer (Debug)</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AD Web Muxer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body { background: #121212; color: #fff; font-family: sans-serif; padding: 20px; text-align: center; }
-        input, select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: 1px solid #333; background: #1e1e1e; color: white; }
-        button { background: #007bff; border: none; font-weight: bold; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .file-box { background: #1e1e1e; padding: 15px; margin-top: 10px; border-radius: 8px; text-align: left; }
-        a { color: #4CAF50; text-decoration: none; font-weight: bold; font-size: 18px; }
-        .error-box { background: #330000; color: #ff9999; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 12px; margin-top: 5px; white-space: pre-wrap; }
-        h3 { border-bottom: 1px solid #333; padding-bottom: 10px; }
+        :root { --primary: #7000ff; --accent: #00ccff; --bg: #0a0a0c; --card: #16161a; --text: #e0e0e0; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Poppins', sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { background: rgba(22, 22, 26, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); padding: 30px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); }
+        h1 { font-weight: 600; text-align: center; margin-bottom: 25px; background: linear-gradient(90deg, var(--accent), var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2rem; }
+        .input-group { margin-bottom: 15px; text-align: left; }
+        label { font-size: 0.85rem; color: #888; margin-bottom: 5px; display: block; }
+        input[type="text"] { width: 100%; padding: 12px; background: #0f0f12; border: 1px solid #333; border-radius: 8px; color: white; font-family: inherit; box-sizing: border-box; transition: 0.3s; }
+        input[type="text"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 10px rgba(0, 204, 255, 0.2); }
+        .file-upload { position: relative; display: flex; align-items: center; justify-content: space-between; background: #0f0f12; border: 1px dashed #444; padding: 10px; border-radius: 8px; cursor: pointer; transition: 0.3s; }
+        .file-upload:hover { border-color: var(--primary); }
+        .file-upload input { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .file-text { font-size: 0.9rem; color: #aaa; }
+        .file-icon { color: var(--accent); font-size: 1.2rem; }
+        .btn-submit { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--primary), #a200ff); color: white; border: none; border-radius: 10px; font-weight: 600; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; box-shadow: 0 4px 15px rgba(112, 0, 255, 0.4); }
+        .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(112, 0, 255, 0.6); }
+        .divider { border-bottom: 1px solid rgba(255,255,255,0.1); margin: 30px 0; }
+        .refresh-btn { background: #222; color: #aaa; border: 1px solid #333; padding: 8px 15px; border-radius: 20px; cursor: pointer; font-size: 0.8rem; transition: 0.2s; }
+        .refresh-btn:hover { color: white; border-color: white; }
+        .file-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 15px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid rgba(255,255,255,0.05); }
+        .file-header { display: flex; justify-content: space-between; align-items: center; }
+        .file-name { font-weight: 600; font-size: 0.95rem; color: #fff; word-break: break-all; }
+        .status { padding: 4px 10px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
+        .status.done { background: rgba(0, 255, 136, 0.15); color: #00ff88; }
+        .status.processing { background: rgba(255, 187, 0, 0.15); color: #ffbb00; animation: pulse 1.5s infinite; }
+        .status.error { background: rgba(255, 50, 50, 0.15); color: #ff3232; }
+        .log-box { font-family: monospace; font-size: 0.75rem; color: #ff6b6b; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; margin-top: 5px; white-space: pre-wrap; word-break: break-word; }
+        .actions { display: flex; gap: 10px; margin-top: 5px; }
+        .btn-dl { flex: 1; text-align: center; background: rgba(0, 204, 255, 0.1); color: var(--accent); padding: 8px; border-radius: 6px; text-decoration: none; font-size: 0.85rem; font-weight: 600; transition: 0.2s; }
+        .btn-dl:hover { background: var(--accent); color: #000; }
+        .btn-del { width: 30px; display: flex; align-items: center; justify-content: center; background: transparent; color: #666; border: 1px solid #333; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: 0.2s; }
+        .btn-del:hover { border-color: #ff3232; color: #ff3232; }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
     </style>
+    <script>
+        function updateFileName(input, id) {
+            const name = input.files[0] ? input.files[0].name : "Choose File...";
+            document.getElementById(id).innerText = name;
+        }
+    </script>
 </head>
 <body>
-    <h2>⚡ AD Web Muxer (Debug Mode)</h2>
-    
-    <form action="/start" method="POST" enctype="multipart/form-data">
-        <input type="text" name="url" placeholder="Paste M3U8 Link Here" required>
-        <input type="file" name="sub" accept=".ass" required>
-        <input type="file" name="font" accept=".ttf,.otf" placeholder="Upload Font (Optional)">
-        <input type="text" name="fname" placeholder="Output Filename (e.g. Episode 01)" required>
-        <button type="submit">🚀 Start Processing</button>
-    </form>
-
-    <h3>📂 Your Files</h3>
-    <button onclick="location.reload()" style="background:#333; width:auto; padding:5px 15px;">Refresh List</button>
-    
-    <div id="file-list">
-        {% for file in files %}
-            <div class="file-box">
-                <div style="font-size:18px;">📄 {{ file.name }}</div>
-                {% if file.status == 'done' %}
-                    <a href="/download/{{ file.realname }}">⬇️ Download Now</a>
-                {% elif file.status == 'processing' %}
-                    <span style="color:orange;">⏳ Processing... (Click Refresh)</span>
-                {% else %}
-                    <span style="color:red;">❌ FAILED</span>
-                    <div class="error-box">LOG: {{ file.log }}</div>
-                {% endif %}
-                <br>
-                <a href="/delete/{{ file.realname }}" style="color:#aaa; font-size:12px; float:right;">🗑️ Delete</a>
+    <div class="container">
+        <h1>AD Web Muxer</h1>
+        
+        <form action="/start" method="POST" enctype="multipart/form-data">
+            <div class="input-group">
+                <label>Video URL (M3U8)</label>
+                <input type="text" name="url" placeholder="Paste link..." required>
             </div>
-        {% else %}
-            <p style="color:#777;">No files found.</p>
-        {% endfor %}
+            <div class="input-group">
+                <label>Subtitle (.ASS)</label>
+                <div class="file-upload">
+                    <span class="file-text" id="sub-name">Choose .ASS File</span>
+                    <span class="file-icon">📂</span>
+                    <input type="file" name="sub" accept=".ass" required onchange="updateFileName(this, 'sub-name')">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>Custom Font (Optional)</label>
+                <div class="file-upload">
+                    <span class="file-text" id="font-name">Choose .TTF/.OTF</span>
+                    <span class="file-icon">🔤</span>
+                    <input type="file" name="font" accept=".ttf,.otf" onchange="updateFileName(this, 'font-name')">
+                </div>
+            </div>
+            <div class="input-group">
+                <label>Output Filename</label>
+                <input type="text" name="fname" placeholder="Episode 01" required>
+            </div>
+            <button type="submit" class="btn-submit">⚡ Start Processing</button>
+        </form>
+
+        <div class="divider"></div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <span style="color:#888; font-size:0.9rem;">Recent Files</span>
+            <button onclick="location.reload()" class="refresh-btn">🔄 Refresh</button>
+        </div>
+        
+        <div>
+            {% for file in files %}
+                <div class="file-card">
+                    <div class="file-header">
+                        <span class="file-name">{{ file.name }}</span>
+                        {% if file.status == 'done' %}
+                            <span class="status done">Success</span>
+                        {% elif file.status == 'processing' %}
+                            <span class="status processing">Running</span>
+                        {% else %}
+                            <span class="status error">Failed</span>
+                        {% endif %}
+                    </div>
+                    
+                    {% if file.status == 'error' %}
+                        <div class="log-box">{{ file.log }}</div>
+                    {% endif %}
+
+                    {% if file.status != 'processing' %}
+                    <div class="actions">
+                        {% if file.status == 'done' %}
+                            <a href="/download/{{ file.realname }}" class="btn-dl">⬇ Download</a>
+                        {% else %}
+                             <div style="flex:1;"></div>
+                        {% endif %}
+                        <a href="/delete/{{ file.realname }}" class="btn-del">🗑</a>
+                    </div>
+                    {% endif %}
+                </div>
+            {% else %}
+                <div style="text-align:center; color:#444; padding:20px; font-size:0.9rem;">
+                    No files yet. Start muxing! 🚀
+                </div>
+            {% endfor %}
+        </div>
     </div>
 </body>
 </html>
@@ -98,10 +172,8 @@ def home():
                     try:
                         with open(log_file, 'r', encoding='utf-8', errors='ignore') as lf:
                             log_content = lf.read()
-                            # Check for common failure keywords
                             if "Error" in log_content or "Invalid data" in log_content or "403 Forbidden" in log_content or "Server returned 40" in log_content:
                                 status = "error"
-                                # GRAB THE LAST 300 CHARACTERS OF LOG TO SHOW USER
                                 err_msg = log_content[-300:] 
                             elif "muxing overhead" in log_content or "LSIZE" in log_content: 
                                 status = "done"
@@ -144,13 +216,13 @@ def start_mux():
 
     open(output_path, 'w').close()
 
-    # --- FIXED COMMAND LIST WITH PROTOCOL WHITELIST ---
+    # --- UPDATED COMMAND WITH STRICT MAPPING ---
     cmd = [
         'ffmpeg', '-y',
         '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
         '-headers', f'Referer: {url}',
         '-tls_verify', '0',
-        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto',  # ADDED THIS!
+        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto', 
         '-reconnect', '1', 
         '-reconnect_streamed', '1', 
         '-reconnect_delay_max', '5',
@@ -160,11 +232,13 @@ def start_mux():
     
     cmd.extend(font_arg)
     
+    # --- HERE IS THE FIX: Explicitly select ONLY Video:0 and Audio:0 ---
     cmd.extend([
-        '-map', '0', 
-        '-map', '1', 
-        '-c', 'copy', 
-        '-disposition:s:0', 'default',
+        '-map', '0:v:0',      # Select ONLY first video stream
+        '-map', '0:a:0',      # Select ONLY first audio stream
+        '-map', '1',          # Select Subtitle file (input 1)
+        '-c', 'copy',         # Copy without re-encoding
+        '-disposition:s:0', 'default', # Make subtitle default
         output_path
     ])
 

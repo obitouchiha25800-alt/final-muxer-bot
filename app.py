@@ -10,7 +10,7 @@ from datetime import timedelta, datetime
 from flask import Flask, render_template, request, send_from_directory, redirect, url_for, jsonify, session, render_template_string
 
 app = Flask(__name__)
-app.secret_key = "final_execution_fix_2025"
+app.secret_key = "popatlal_coder_redemption_2025"
 
 # --- CONFIGURATION ---
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
@@ -20,13 +20,17 @@ BASE_DOWNLOAD = 'downloads'
 BASE_FONT_ROOT = 'User_Fonts' 
 STATUS_FILE = 'status.json'
 
+# Dictionary to store process objects
+TASKS = {}
+
 for folder in [BASE_UPLOAD, BASE_DOWNLOAD, BASE_FONT_ROOT]:
     os.makedirs(folder, exist_ok=True)
 
-# --- GLOBAL TASKS DICTIONARY ---
-TASKS = {}
+# --- CHECK FFMPEG ON STARTUP ---
+if not shutil.which("ffmpeg"):
+    print("⚠️ WARNING: FFmpeg not found! Install it on Render.")
 
-# --- AUTO-CLEANER (Safe Mode) ---
+# --- AUTO-CLEANER ---
 def clean_old_files():
     while True:
         try:
@@ -39,17 +43,11 @@ def clean_old_files():
                         if now - os.path.getmtime(f_path) > retention_period:
                             try: os.remove(f_path)
                             except: pass
-            
-            # Clean dead tasks from memory
-            keys_to_remove = [k for k, p in TASKS.items() if p.poll() is not None]
-            for k in keys_to_remove:
-                del TASKS[k]
         except: pass
         time.sleep(600)
 
 threading.Thread(target=clean_old_files, daemon=True).start()
 
-# --- HEADERS ---
 @app.after_request
 def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -57,7 +55,6 @@ def add_header(r):
     r.headers["Expires"] = "0"
     return r
 
-# --- HELPER ---
 def get_user_id():
     session.permanent = True 
     if 'user_id' not in session:
@@ -92,22 +89,18 @@ INDEX_HTML = """
         .box { background: #161b22; padding: 15px; border: 1px solid #30363d; border-radius: 12px; margin-bottom: 20px; }
         input, select { width: 100%; padding: 12px; margin: 8px 0; background: #0d1117; color: white; border: 1px solid #30363d; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
         button { width: 100%; padding: 14px; margin-top: 10px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; border: none; }
-        
         .btn-green { background: #238636; color: white; transition: 0.3s; }
         .btn-blue { background: #1f6feb; color: white; transition: 0.3s; font-size: 14px; padding: 6px 12px; } 
         .btn-grey { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; font-size: 14px; padding: 8px 15px; transition: 0.2s; }
         .btn-red { background: #da3633; color: white; transition: 0.3s; padding: 8px 12px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 0.9rem; }
-        
         .font-list { text-align: left; margin-top: 15px; max-height: 150px; overflow-y: auto; }
         .font-item { display: flex; justify-content: space-between; align-items: center; background: #21262d; padding: 8px 12px; border-radius: 6px; margin-bottom: 5px; border: 1px solid #30363d; }
         .font-name { font-size: 0.9rem; color: #e6edf3; }
         .btn-del-font { background: transparent; border: none; color: #da3633; cursor: pointer; font-size: 1.1rem; padding: 0 5px; }
-        
         .actions { display: flex; gap: 8px; margin-top: 10px; }
         .btn-dl { background: #238636; color: white; text-decoration: none; padding: 10px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; flex-grow: 2; text-align: center; display: flex; align-items: center; justify-content: center; }
         .btn-copy { background: #1f6feb; color: white; border: none; padding: 10px; border-radius: 6px; font-size: 1.2rem; cursor: pointer; flex-grow: 1; margin-top: 0; }
         .btn-del { background: transparent; border: 1px solid #da3633; color: #da3633; padding: 10px; border-radius: 6px; font-size: 1.2rem; cursor: pointer; flex-grow: 0; margin-top: 0; }
-        
         .file-item { background: #21262d; margin-top: 12px; padding: 15px; border-radius: 8px; border: 1px solid #30363d; text-align: left; }
         .file-name { font-weight: bold; word-break: break-all; color: #e6edf3; font-size: 0.95rem; }
         .progress-container { background: #333; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 8px; }
@@ -128,12 +121,13 @@ INDEX_HTML = """
                         div.querySelector('.status-text').innerText = d.status;
                         div.querySelector('.status-text').style.color = "#ff7b72";
                         div.querySelector('.progress-bar').style.backgroundColor = "#ff7b72";
+                        div.classList.remove('processing');
                     } else {
                         div.querySelector('.progress-bar').style.width = d.percent + "%";
                         if(d.percent >= 100) {
                             div.querySelector('.status-text').innerText = "✅ Finalizing...";
                             div.querySelector('.status-text').style.color = "#39d353";
-                            setTimeout(() => location.reload(), 1500);
+                            setTimeout(() => location.reload(), 2000);
                         } else {
                             div.querySelector('.status-text').innerText = d.status;
                         }
@@ -217,7 +211,6 @@ INDEX_HTML = """
             <p style="color:#8b949e; margin-top: 20px;">No files yet.</p>
         {% endfor %}
     </div>
-    
     <div class="cleaner-badge">🧹 Auto-Cleaner Active</div>
 </body>
 </html>
@@ -268,13 +261,13 @@ def get_progress(filename):
     try:
         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f: content = f.read()
         
-        # Check specific errors
-        if "403 Forbidden" in content or "Server returned 403" in content:
-             return jsonify({"percent": 0, "status": "❌ Error 403: Link Protected"})
-        if "No such file" in content:
-             return jsonify({"percent": 0, "status": "❌ Error: Link Broken"})
-        if "Invalid data" in content:
-             return jsonify({"percent": 0, "status": "❌ Error: Invalid Video Data"})
+        # ERROR LOGGING FOR DEBUGGING
+        if "Server returned 403 Forbidden" in content:
+             return jsonify({"percent": 0, "status": "❌ Error 403: Protected Link"})
+        if "No such file or directory" in content:
+             return jsonify({"percent": 0, "status": "❌ Error: Link Invalid"})
+        if "Invalid data found" in content:
+             return jsonify({"percent": 0, "status": "❌ Error: Invalid Format"})
         
         duration_match = re.search(r"Duration: (\d{2}:\d{2}:\d{2}\.\d{2})", content)
         time_matches = re.findall(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", content)
@@ -315,38 +308,34 @@ def mux_video():
     final_path = os.path.join(BASE_DOWNLOAD, final_name)
     log_path = temp_path + ".log"
     
-    font_cmd = []
+    font_cmd = ""
     if selected_font and selected_font != "NONE":
         f_path = os.path.join(get_user_font_dir(), selected_font)
         if os.path.exists(f_path):
-            font_cmd = ['-attach', f_path, '-metadata:s:t', 'mimetype=application/x-truetype-font']
+            font_cmd = f' -attach "{f_path}" -metadata:s:t mimetype=application/x-truetype-font'
 
-    # Create dummy file
     try: open(temp_path, 'w').close()
     except: pass
 
-    # --- THE LIST BASED COMMAND (NO SHELL=TRUE) ---
-    cmd = [
-        'ffmpeg', '-y',
-        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        '-headers', f'Referer: {m3u8_link}\r\n',
-        '-tls_verify', '0',
-        '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
-        '-i', m3u8_link,
-        '-i', sub_path
-    ]
+    # --- THE COMMAND THAT WORKS ON LINUX SHELL ---
+    # We use basic string concatenation with simple quotes.
+    # No f-strings inside the subprocess call to avoid confusion.
     
-    # Add Font Command
-    if font_cmd:
-        cmd.extend(font_cmd)
-        
-    # Add Mapping and Copy (Must be at end)
-    cmd.extend(['-map', '0', '-map', '1', '-c', 'copy', '-disposition:s:0', 'default', temp_path])
+    user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     
-    # Run Process (Redirect Output to Log)
-    with open(log_path, "w") as log:
-        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
-        TASKS[temp_name] = proc
+    # We escape double quotes for the shell
+    cmd = (
+        f'ffmpeg -y -user_agent "{user_agent}" '
+        f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 '
+        f'-i "{m3u8_link}" -i "{sub_path}"{font_cmd} '
+        f'-map 0 -map 1 -c copy -disposition:s:0 default '
+        f'"{temp_path}" > "{log_path}" 2>&1 && mv "{temp_path}" "{final_path}"'
+    )
+    
+    print(f"DEBUG EXECUTING: {cmd}") # Check Logs if this fails
+    
+    proc = subprocess.Popen(cmd, shell=True)
+    TASKS[temp_name] = proc
 
     time.sleep(1)
     return redirect(url_for('index'))
@@ -359,14 +348,12 @@ def cancel_task(filename):
                 TASKS[filename].kill()
                 del TASKS[filename]
             except: pass
-        
         try:
             path = os.path.join(BASE_DOWNLOAD, filename)
             if os.path.exists(path): os.remove(path)
             log_path = path + ".log"
             if os.path.exists(log_path): os.remove(log_path)
         except: pass
-        
     return redirect(url_for('index'))
 
 @app.route('/downloads/<filename>')

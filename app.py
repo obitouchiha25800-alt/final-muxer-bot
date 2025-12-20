@@ -52,7 +52,7 @@ def calculate_progress(log_content):
         pass
     return 0
 
-# --- UI CODE (Dark Theme + Correct Label) ---
+# --- UI CODE ---
 HTML_CODE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -67,7 +67,7 @@ HTML_CODE = """
 
         /* --- DARK BACKGROUND --- */
         body {
-            background-color: #0d0d10; /* Pitch dark background */
+            background-color: #0d0d10;
             color: #ffffff;
             display: flex;
             flex-direction: column;
@@ -189,13 +189,17 @@ HTML_CODE = """
         .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; margin-top: 8px; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, #00d4ff, #7b61ff); transition: width 0.5s; }
         
-        .action-row { display: flex; gap: 10px; margin-top: 12px; }
-        .btn-small { flex: 1; padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; transition: 0.2s; }
+        .action-row { display: flex; gap: 8px; margin-top: 12px; }
+        .btn-small { padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; transition: 0.2s; border: none;}
         
-        .btn-dl { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid transparent; }
+        .btn-dl { flex: 2; background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
         .btn-dl:hover { background: #3b82f6; color: #fff; }
+
+        /* Copy Button Style */
+        .btn-copy { flex: 2; background: rgba(123, 97, 255, 0.15); color: #7b61ff; }
+        .btn-copy:hover { background: #7b61ff; color: #fff; }
         
-        .btn-del { width: 35px; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid #333; color: #666; }
+        .btn-del { width: 35px; flex: none; display: flex; align-items: center; justify-content: center; border: 1px solid #333; color: #666; background: transparent; }
         .btn-del:hover { border-color: #ff3232; color: #ff3232; }
 
         /* --- FOOTER --- */
@@ -206,6 +210,16 @@ HTML_CODE = """
         function updateFileName(input, id) {
             const name = input.files[0] ? input.files[0].name : "Choose File...";
             document.getElementById(id).innerText = name;
+        }
+
+        // Copy Function Added Back
+        function copyLink(filename) {
+            const link = window.location.origin + "/download/" + filename;
+            navigator.clipboard.writeText(link).then(() => {
+                alert("✅ Link Copied!\\n" + link);
+            }).catch(err => {
+                prompt("Copy this link:", link);
+            });
         }
     </script>
 </head>
@@ -279,7 +293,8 @@ HTML_CODE = """
 
             {% if file.status == 'done' %}
             <div class="action-row">
-                <a href="/download/{{ file.realname }}" class="btn-small btn-dl">⬇ Download File</a>
+                <a href="/download/{{ file.realname }}" class="btn-small btn-dl">⬇ Download</a>
+                <button onclick="copyLink('{{ file.realname }}')" class="btn-small btn-copy">📋 Copy Link</button>
                 <a href="/delete/{{ file.realname }}" class="btn-small btn-del">🗑</a>
             </div>
             {% endif %}
@@ -405,4 +420,3 @@ def delete(filename):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-    

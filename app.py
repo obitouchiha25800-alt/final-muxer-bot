@@ -52,7 +52,7 @@ def calculate_progress(log_content):
         pass
     return 0
 
-# --- UI CODE (THEME APPLIED HERE) ---
+# --- UI CODE (Dark Theme + Correct Label) ---
 HTML_CODE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -163,7 +163,7 @@ HTML_CODE = """
         .btn-process:hover { opacity: 0.9; }
         .btn-process:active { transform: scale(0.98); }
 
-        /* --- RECENT FILES SECTION (Styled to match theme) --- */
+        /* --- RECENT FILES SECTION --- */
         .recent-section { width: 100%; max-width: 480px; }
         .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
         .section-title { font-size: 14px; color: #888; font-weight: 600; }
@@ -171,7 +171,7 @@ HTML_CODE = """
         .refresh-btn:hover { color: #fff; border-color: #fff; }
 
         .file-card {
-            background-color: #1a1a20; /* Slightly different to distinguish from main card */
+            background-color: #1a1a20;
             border: 1px solid #2a2a30;
             border-radius: 12px;
             padding: 15px;
@@ -216,7 +216,7 @@ HTML_CODE = """
         
         <form action="/start" method="POST" enctype="multipart/form-data">
             
-            <label>Video URL / File Link</label>
+            <label>Video URL (M3U8)</label>
             <input type="text" name="url" placeholder="Paste direct video link here..." required>
 
             <label>Subtitle File (.ASS)</label>
@@ -405,3 +405,4 @@ def delete(filename):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
+    

@@ -7,7 +7,7 @@ import re
 from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-app.secret_key = "final_clean_download_2025"
+app.secret_key = "ultimate_vibe_final_2025"
 
 # --- FOLDERS ---
 BASE_DIR = os.getcwd()
@@ -118,6 +118,10 @@ HTML_CODE = """
         .btn-copy:hover { border-color: var(--primary); color: var(--primary); }
         .btn-del { width: 32px; display: flex; align-items: center; justify-content: center; background: transparent; color: #666; border: 1px solid #333; border-radius: 6px; text-decoration: none; font-size: 1rem; transition: 0.2s; }
         .btn-del:hover { border-color: #ff3232; color: #ff3232; }
+        
+        /* Auto Refresh Timer Style */
+        #auto-refresh-timer { font-size: 0.75rem; color: var(--accent); margin-left: 10px; display:none; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 0.7; } 50% { opacity: 1; } 100% { opacity: 0.7; } }
     </style>
     <script>
         function updateFileName(input, id) {
@@ -125,8 +129,6 @@ HTML_CODE = """
             document.getElementById(id).innerText = name;
         }
         function copyLink(filename) {
-            // Remove UID for clean copy link too if possible, but real link needs UID to find file. 
-            // We will copy the real download link but the downloaded file will be clean.
             const link = window.location.origin + "/download/" + filename;
             navigator.clipboard.writeText(link).then(() => {
                 alert("✅ Link Copied!\\n" + link);
@@ -134,6 +136,29 @@ HTML_CODE = """
                 prompt("Copy this link:", link);
             });
         }
+        
+        // --- SMART AUTO REFRESH LOGIC ---
+        document.addEventListener('DOMContentLoaded', function() {
+            const processingItems = document.querySelectorAll('.status.processing');
+            // Agar koi file processing mein hai, tabhi refresh karega
+            if (processingItems.length > 0) {
+                const timerSpan = document.getElementById('auto-refresh-timer');
+                if(timerSpan) {
+                    timerSpan.style.display = 'inline';
+                    let timeLeft = 5; // 5 seconds timer
+                    timerSpan.innerText = "⟳ Refresh: " + timeLeft + "s";
+                    
+                    const interval = setInterval(() => {
+                        timeLeft--;
+                        timerSpan.innerText = "⟳ Refresh: " + timeLeft + "s";
+                        if (timeLeft <= 0) {
+                            clearInterval(interval);
+                            location.reload();
+                        }
+                    }, 1000);
+                }
+            }
+        });
     </script>
 </head>
 <body>
@@ -184,7 +209,10 @@ HTML_CODE = """
         <div class="divider"></div>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <span style="color:#888; font-size:0.85rem;">Recent Files</span>
+            <div style="display:flex; align-items:center;">
+                <span style="color:#888; font-size:0.85rem;">Recent Files</span>
+                <span id="auto-refresh-timer"></span>
+            </div>
             <button onclick="location.reload()" class="refresh-btn">🔄 Status</button>
         </div>
         
@@ -234,133 +262,3 @@ HTML_CODE = """
     </div>
 </body>
 </html>
-"""
-
-@app.route('/')
-def home():
-    uid = get_uid()
-    files_data = []
-    
-    saved_fonts_list = []
-    if os.path.exists(FONT_FOLDER):
-        raw_fonts = sorted([f for f in os.listdir(FONT_FOLDER) if f.startswith(uid)])
-        saved_fonts_list = [f.replace(f"{uid}_", "") for f in raw_fonts]
-
-    if os.path.exists(DOWNLOAD_FOLDER):
-        for f in sorted(os.listdir(DOWNLOAD_FOLDER)):
-            if f.startswith(uid) and f.endswith(".mkv"):
-                status = "done"
-                log_file = os.path.join(DOWNLOAD_FOLDER, f + ".log")
-                log_tail = "Initializing..."
-                percent = 0
-
-                if os.path.exists(log_file):
-                    try:
-                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as lf:
-                            content = lf.read()
-                            percent = calculate_progress(content)
-                            
-                            if "Error" in content or "Invalid data" in content or "403 Forbidden" in content:
-                                status = "error"
-                                log_tail = content[-300:] 
-                            elif "muxing overhead" in content or "LSIZE" in content: 
-                                status = "done"
-                                percent = 100
-                            else:
-                                status = "processing"
-                                log_tail = content[-150:] if content else "Starting..."
-                    except: status = "processing"
-                
-                display_name = f.replace(f"{uid}_", "").replace(".mkv", "")
-                
-                files_data.append({
-                    "name": display_name,
-                    "realname": f,
-                    "status": status,
-                    "log": log_tail,
-                    "percent": percent
-                })
-
-    return render_template_string(HTML_CODE, files=files_data, saved_fonts=saved_fonts_list)
-
-@app.route('/start', methods=['POST'])
-def start_mux():
-    uid = get_uid()
-    
-    url = request.form.get('url')
-    fname = request.form.get('fname').strip()
-    
-    sub_file = request.files.get('sub')
-    sub_path = os.path.join(UPLOAD_FOLDER, f"{uid}_sub.ass")
-    sub_file.save(sub_path)
-    
-    font_arg = []
-    final_font_path = None
-    font_file = request.files.get('font')
-    saved_font_name = request.form.get('saved_font')
-
-    if font_file and font_file.filename:
-        final_font_path = os.path.join(FONT_FOLDER, f"{uid}_{font_file.filename}")
-        font_file.save(final_font_path)
-    elif saved_font_name:
-        final_font_path = os.path.join(FONT_FOLDER, f"{uid}_{saved_font_name}")
-    
-    if final_font_path and os.path.exists(final_font_path):
-        font_arg = ['-attach', final_font_path, '-metadata:s:t', 'mimetype=application/x-truetype-font']
-
-    output_filename = f"{uid}_{fname}.mkv"
-    output_path = os.path.join(DOWNLOAD_FOLDER, output_filename)
-    log_path = output_path + ".log"
-
-    open(output_path, 'w').close()
-
-    cmd = [
-        'ffmpeg', '-y',
-        '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        '-headers', f'Referer: {url}',
-        '-tls_verify', '0',
-        '-protocol_whitelist', 'file,http,https,tcp,tls,crypto', 
-        '-reconnect', '1', 
-        '-reconnect_streamed', '1', 
-        '-reconnect_delay_max', '5',
-        '-i', url,
-        '-i', sub_path
-    ]
-    
-    cmd.extend(font_arg)
-    
-    cmd.extend([
-        '-map', '0:V',
-        '-map', '0:a',
-        '-map', '1',          
-        '-c', 'copy',         
-        '-disposition:s:0', 'default', 
-        output_path
-    ])
-
-    with open(log_path, "w") as log_file:
-        subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
-
-    time.sleep(1)
-    return redirect(url_for('home'))
-
-# --- FIXED DOWNLOAD ROUTE (Removes UUID from download name) ---
-@app.route('/download/<filename>')
-def download(filename):
-    clean_name = filename
-    # Remove UID if present (Simple check for underscore)
-    if '_' in filename:
-        clean_name = filename.split('_', 1)[1]
-        
-    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True, download_name=clean_name)
-
-@app.route('/delete/<filename>')
-def delete(filename):
-    try:
-        os.remove(os.path.join(DOWNLOAD_FOLDER, filename))
-        os.remove(os.path.join(DOWNLOAD_FOLDER, filename + ".log"))
-    except: pass
-    return redirect(url_for('home'))
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)

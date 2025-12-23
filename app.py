@@ -7,7 +7,7 @@ import re
 from flask import Flask, render_template_string, request, send_from_directory, redirect, url_for, session
 
 app = Flask(__name__)
-application = app  # <--- SERVER ISKO DHOOND RAHA HAI
+application = app  # <--- SERVER KA BOSS
 app.secret_key = "final_default_font_2025"
 
 # --- FOLDERS ---
@@ -173,3 +173,90 @@ HTML_CODE = """
     </div>
 </body>
 </html>
+"""
+
+# --- ROUTES ---
+@app.route('/')
+def home():
+    uid = get_uid()
+    files_data = []
+    saved_fonts_list = []
+    if os.path.exists(FONT_FOLDER):
+        saved_fonts_list = [f.replace(f"{uid}_", "") for f in sorted(os.listdir(FONT_FOLDER)) if f.startswith(uid)]
+
+    if os.path.exists(DOWNLOAD_FOLDER):
+        for f in sorted(os.listdir(DOWNLOAD_FOLDER)):
+            if f.startswith(uid) and f.endswith(".mkv"):
+                status = "done"
+                log_file = os.path.join(DOWNLOAD_FOLDER, f + ".log")
+                percent = 0
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as lf:
+                            c = lf.read()
+                            percent = calculate_progress(c)
+                            if "Error" in c or "Invalid data" in c: status = "error"
+                            elif "muxing overhead" in c or "LSIZE" in c: status = "done"; percent = 100
+                            else: status = "processing"
+                    except: status = "processing"
+                files_data.append({"name": f.replace(f"{uid}_", "").replace(".mkv", ""), "realname": f, "status": status, "percent": percent})
+    
+    return render_template_string(HTML_CODE, files=files_data, saved_fonts=saved_fonts_list)
+
+@app.route('/start', methods=['POST'])
+def start_mux():
+    uid = get_uid()
+    url = request.form.get('url')
+    fname = request.form.get('fname').strip()
+    
+    sub_file = request.files.get('sub')
+    sub_path = os.path.join(UPLOAD_FOLDER, f"{uid}_sub.ass")
+    sub_file.save(sub_path)
+    
+    final_font_path = None
+    font_file = request.files.get('font')
+    saved_font_name = request.form.get('saved_font')
+
+    if font_file and font_file.filename:
+        final_font_path = os.path.join(FONT_FOLDER, f"{uid}_{font_file.filename}")
+        font_file.save(final_font_path)
+    elif saved_font_name:
+        final_font_path = os.path.join(FONT_FOLDER, f"{uid}_{saved_font_name}")
+    
+    # --- DEFAULT FONT LOGIC ---
+    if not final_font_path:
+        default_font = os.path.join(FONT_FOLDER, "default.ttf")
+        if os.path.exists(default_font):
+            final_font_path = default_font
+
+    font_arg = ['-attach', final_font_path, '-metadata:s:t', 'mimetype=application/x-truetype-font'] if final_font_path else []
+
+    output_path = os.path.join(DOWNLOAD_FOLDER, f"{uid}_{fname}.mkv")
+    open(output_path, 'w').close()
+
+    # --- USE SMART FFMPEG PATH ---
+    cmd = [FFMPEG_BIN, '-y', '-headers', f'Referer: {url}', '-tls_verify', '0', '-reconnect', '1', '-reconnect_streamed', '1', '-i', url, '-i', sub_path]
+    cmd.extend(font_arg)
+    cmd.extend(['-map', '0:V', '-map', '0:a', '-map', '1', '-c', 'copy', '-disposition:s:0', 'default', output_path])
+
+    with open(output_path + ".log", "w") as log_file:
+        subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT)
+
+    time.sleep(1)
+    return redirect(url_for('home'))
+
+@app.route('/download/<filename>')
+def download(filename):
+    clean = filename.split('_', 1)[1] if '_' in filename else filename
+    return send_from_directory(DOWNLOAD_FOLDER, filename, as_attachment=True, download_name=clean)
+
+@app.route('/delete/<filename>')
+def delete(filename):
+    try:
+        os.remove(os.path.join(DOWNLOAD_FOLDER, filename))
+        os.remove(os.path.join(DOWNLOAD_FOLDER, filename + ".log"))
+    except: pass
+    return redirect(url_for('home'))
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
